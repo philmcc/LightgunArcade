@@ -23,7 +23,7 @@ export class LevelManager {
             // Add others here
         ];
 
-        this.isDebugMode = false;
+        this.isPracticeMode = false;
     }
 
     setDifficulty(diff) {
@@ -61,16 +61,16 @@ export class LevelManager {
             this.currentGame.update(dt);
 
             if (this.currentGame.isComplete) {
-                if (this.isDebugMode) {
-                    // In debug mode, return to debug menu
-                    this.game.showStageResult(true, () => this.game.showDebugMenu());
+                if (this.isPracticeMode) {
+                    // In practice mode, return to practice menu
+                    this.game.showStageResult(true, () => this.game.showPracticeMenu());
                 } else {
                     this.game.showStageResult(true, () => this.startNextStage());
                 }
             } else if (this.currentGame.isFailed) {
-                if (this.isDebugMode) {
-                    // In debug mode, return to debug menu
-                    this.game.showStageResult(false, () => this.game.showDebugMenu());
+                if (this.isPracticeMode) {
+                    // In practice mode, return to practice menu (but show stats first)
+                    this.game.showStageResult(false, () => this.game.showPracticeMenu());
                 } else {
                     this.lives--;
                     if (this.lives <= 0) {

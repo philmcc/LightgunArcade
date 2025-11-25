@@ -66,8 +66,7 @@ export class ColorMatch extends MiniGame {
         this.flowers = [];
         this.generateScenery();
 
-        // Particle system
-        this.explosions = [];
+
     }
 
     generateScenery() {
@@ -224,23 +223,8 @@ export class ColorMatch extends MiniGame {
             }
         }
 
-        // Update explosions
-        for (let i = this.explosions.length - 1; i >= 0; i--) {
-            const ex = this.explosions[i];
-            ex.lifetime += dt;
-            if (ex.lifetime >= ex.maxLifetime) {
-                this.explosions.splice(i, 1);
-                continue;
-            }
-
-            // Update particles
-            ex.particles.forEach(p => {
-                p.x += p.vx * dt;
-                p.y += p.vy * dt;
-                p.vy += 500 * dt; // Gravity
-                p.alpha = 1 - (ex.lifetime / ex.maxLifetime);
-            });
-        }
+        // Call super update for particles
+        super.update(dt);
     }
 
     draw(ctx) {
@@ -519,19 +503,8 @@ export class ColorMatch extends MiniGame {
         ctx.fillText(text, this.game.canvas.width / 2, 50);
         ctx.shadowBlur = 0;
 
-        // Draw Explosions
-        this.explosions.forEach(ex => {
-            ex.particles.forEach(p => {
-                ctx.save();
-                ctx.globalAlpha = p.alpha;
-                ctx.translate(p.x, p.y);
-                ctx.fillStyle = ex.color;
-                ctx.beginPath();
-                ctx.arc(0, 0, p.size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            });
-        });
+        // Draw Particles (Explosions & Shot Indicators)
+        super.drawParticles(ctx);
     }
 
     drawCloudShape(ctx, ox, oy) {
@@ -566,7 +539,7 @@ export class ColorMatch extends MiniGame {
                     const accuracyFactor = 1 - (dist / t.size) * 0.5;
                     const points = Math.ceil(200 * accuracyFactor);
 
-                    this.recordHit(points);
+                    this.recordHit(points, accuracyFactor);
                     this.targetsShot++;
 
                     // Spawn explosion
@@ -590,30 +563,6 @@ export class ColorMatch extends MiniGame {
         }
     }
 
-    spawnExplosion(x, y, color) {
-        const particles = [];
-        const particleCount = 20;
-
-        for (let i = 0; i < particleCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 100 + Math.random() * 200;
-            particles.push({
-                x: x,
-                y: y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                size: 5 + Math.random() * 10,
-                alpha: 1.0
-            });
-        }
-
-        this.explosions.push({
-            particles: particles,
-            color: color,
-            lifetime: 0,
-            maxLifetime: 0.5
-        });
-    }
     drawTree(ctx, x, y, scale, type) {
         ctx.save();
         ctx.translate(x, y);

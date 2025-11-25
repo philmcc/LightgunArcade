@@ -137,7 +137,7 @@ export class Game {
         <div style="margin-top: 20px;">
             <button id="btn-highscores">HIGH SCORES</button>
             <button id="btn-settings">SETTINGS</button>
-            <button id="btn-debug" style="font-size: 0.8rem; opacity: 0.7;">DEBUG MODE</button>
+            <button id="btn-debug" style="font-size: 0.8rem; opacity: 0.7;">PRACTICE MODE</button>
             <button id="btn-exit-arcade" style="font-size: 0.8rem; margin-top: 10px; background: #444;">EXIT TO ARCADE</button>
         </div>
       </div>
@@ -148,12 +148,12 @@ export class Game {
         document.getElementById("btn-hard").onclick = () => this.startGame('hard');
         document.getElementById("btn-highscores").onclick = () => this.showHighScores();
         document.getElementById("btn-settings").onclick = () => this.showSettings();
-        document.getElementById("btn-debug").onclick = () => this.showDebugMenu();
+        document.getElementById("btn-debug").onclick = () => this.showPracticeMenu();
         document.getElementById("btn-exit-arcade").onclick = () => this.arcade.returnToArcade();
     }
 
     startGame(difficulty) {
-        this.levelManager.isDebugMode = false;
+        this.levelManager.isPracticeMode = false;
         this.levelManager.setDifficulty(difficulty);
         this.levelManager.startNextStage();
     }
@@ -187,7 +187,8 @@ export class Game {
         const color = success ? "#00ccff" : "#ff0055";
 
         let statsHTML = '';
-        if (success && this.levelManager.currentGame) {
+        // Show stats if success OR if in practice mode (even if failed)
+        if ((success || this.levelManager.isPracticeMode) && this.levelManager.currentGame) {
             const game = this.levelManager.currentGame;
             const bonuses = game.calculateBonuses();
             const accuracy = game.getAccuracy();
@@ -203,8 +204,16 @@ export class Game {
             <span>${game.stats.baseScore}</span>
           </div>
           <div class="stat-row">
+            <span>Difficulty (${game.difficulty.toUpperCase()}):</span>
+            <span>x${game.scoreMultiplier}</span>
+          </div>
+          <div class="stat-row">
             <span>Accuracy (${accuracy.toFixed(1)}%):</span>
             <span>+${bonuses.accuracy}</span>
+          </div>
+          <div class="stat-row">
+            <span>Pinpoint (${bonuses.pinpointPercent.toFixed(1)}%):</span>
+            <span>+${bonuses.pinpoint}</span>
           </div>
           <div class="stat-row">
             <span>Speed Bonus:</span>
@@ -225,12 +234,15 @@ export class Game {
         <div class="screen result" style="border-color: ${color}">
             <h1 style="color: ${color}">${msg}</h1>
             ${statsHTML}
+            <button id="btn-next" style="margin-top: 20px;">NEXT</button>
         </div>
     `;
 
-        setTimeout(() => {
+        const btnNext = document.getElementById('btn-next');
+        btnNext.onclick = () => {
             callback();
-        }, 3000); // Increased to 3s to read stats
+        };
+        btnNext.focus();
     }
 
     gameClear(finalScore) {
@@ -410,10 +422,10 @@ export class Game {
         document.getElementById("btn-back").onclick = () => this.showMenu();
     }
 
-    showDebugMenu() {
+    showPracticeMenu() {
         this.uiLayer.innerHTML = `
             <div class="screen">
-                <h1>DEBUG MODE</h1>
+                <h1>PRACTICE MODE</h1>
                 <h3>Select Mini-Game & Difficulty</h3>
                 
                 <div class="debug-grid">
@@ -454,16 +466,16 @@ export class Game {
             btn.onclick = () => {
                 const game = btn.dataset.game;
                 const diff = btn.dataset.diff;
-                this.startDebugGame(game, diff);
+                this.startPracticeGame(game, diff);
             };
         });
 
         document.getElementById("btn-back").onclick = () => this.showMenu();
     }
 
-    startDebugGame(gameName, difficulty) {
-        // Enable debug mode
-        this.levelManager.isDebugMode = true;
+    startPracticeGame(gameName, difficulty) {
+        // Enable practice mode
+        this.levelManager.isPracticeMode = true;
 
         // Import the game class dynamically
         import(`./minigames/${gameName}.js`).then(module => {
@@ -477,7 +489,7 @@ export class Game {
             // Show simple UI
             this.uiLayer.innerHTML = `
                 <div style="position: absolute; top: 20px; left: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                    DEBUG: ${gameName} (${difficulty})
+                    PRACTICE: ${gameName} (${difficulty})
                 </div>
                 <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
                     SCORE: <span id="score-display">0</span>

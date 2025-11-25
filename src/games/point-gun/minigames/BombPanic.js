@@ -73,20 +73,26 @@ export class BombPanic extends MiniGame {
             return;
         }
 
-        // Ensure enough targets
-        const targets = this.entities.filter(e => e.type === 'target');
-        if (targets.length < 3) {
-            this.spawnEntity('target');
+        if (Date.now() - this.lastSpawn > this.spawnRate) {
+            this.spawnEntity();
+            this.lastSpawn = Date.now();
         }
 
-        this.entities.forEach(e => {
+        for (let i = this.entities.length - 1; i >= 0; i--) {
+            const e = this.entities[i];
+
             e.x += e.vx * dt;
             e.y += e.vy * dt;
-            e.rotation += dt * 2;
 
             if (e.x - e.size < 0 || e.x + e.size > this.game.canvas.width) e.vx *= -1;
             if (e.y - e.size < 0 || e.y + e.size > this.game.canvas.height) e.vy *= -1;
-        });
+
+            if (e.type === 'bomb') {
+                e.rotation += dt * 2;
+            }
+        }
+
+        super.update(dt);
     }
 
     draw(ctx) {
@@ -97,21 +103,50 @@ export class BombPanic extends MiniGame {
             ctx.save();
             ctx.translate(e.x, e.y);
 
-            if (e.type === 'bomb') {
-                // Draw Bomb with better graphics
-                // Main bomb body
-                ctx.fillStyle = "#1a1a1a";
+            if (e.type === 'target') {
+                // Military-style Target
+                ctx.fillStyle = "#556B2F"; // Dark Olive Green
                 ctx.beginPath();
                 ctx.arc(0, 0, e.size, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Bomb highlight
-                const gradient = ctx.createRadialGradient(-e.size * 0.3, -e.size * 0.3, 0, 0, 0, e.size);
-                gradient.addColorStop(0, "rgba(80,80,80,0.8)");
-                gradient.addColorStop(1, "rgba(0,0,0,0)");
-                ctx.fillStyle = gradient;
+                ctx.strokeStyle = "#8FBC8F"; // Dark Sea Green
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(0, 0, e.size * 0.8, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Crosshair
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(-e.size * 0.6, 0);
+                ctx.lineTo(e.size * 0.6, 0);
+                ctx.moveTo(0, -e.size * 0.6);
+                ctx.lineTo(0, e.size * 0.6);
+                ctx.stroke();
+
+                // Skull icon (simplified)
+                ctx.fillStyle = "#fff";
+                ctx.font = "20px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("☠", 0, 0);
+
+            } else {
+                // Bomb
+                ctx.rotate(e.rotation);
+
+                // Bomb Body
+                ctx.fillStyle = "#000";
                 ctx.beginPath();
                 ctx.arc(0, 0, e.size, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Highlight
+                ctx.fillStyle = "#333";
+                ctx.beginPath();
+                ctx.arc(-e.size * 0.3, -e.size * 0.3, e.size * 0.2, 0, Math.PI * 2);
                 ctx.fill();
 
                 // Fuse
@@ -119,56 +154,33 @@ export class BombPanic extends MiniGame {
                 ctx.lineWidth = 4;
                 ctx.beginPath();
                 ctx.moveTo(0, -e.size);
-                ctx.quadraticCurveTo(15, -e.size - 15, 25, -e.size - 10);
+                ctx.quadraticCurveTo(10, -e.size - 10, 20, -e.size - 5);
                 ctx.stroke();
 
-                // Fuse spark
-                ctx.fillStyle = "#ff6600";
+                // Spark
+                ctx.fillStyle = "#FF4500";
                 ctx.beginPath();
-                ctx.arc(25, -e.size - 10, 5, 0, Math.PI * 2);
+                ctx.arc(20, -e.size - 5, 5 + Math.random() * 3, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Danger symbol
-                ctx.fillStyle = "#ff0000";
-                ctx.font = "bold 40px Arial";
+                // Skull on bomb
+                ctx.fillStyle = "red";
+                ctx.font = "24px Arial";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
-                ctx.fillText("☠", 0, 0);
-
-            } else {
-                // Draw military-style Target
-                // Camouflage base
-                ctx.beginPath();
-                ctx.arc(0, 0, e.size, 0, Math.PI * 2);
-                ctx.fillStyle = "#4a5a3a";
-                ctx.fill();
-
-                // Orange center (military target style)
-                ctx.beginPath();
-                ctx.arc(0, 0, e.size * 0.6, 0, Math.PI * 2);
-                ctx.fillStyle = "#ff6600";
-                ctx.fill();
-
-                // White center dot
-                ctx.beginPath();
-                ctx.arc(0, 0, e.size * 0.2, 0, Math.PI * 2);
-                ctx.fillStyle = "#ffffff";
-                ctx.fill();
-
-                // Border
-                ctx.strokeStyle = "#333";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(0, 0, e.size, 0, Math.PI * 2);
-                ctx.stroke();
+                ctx.fillText("!", 0, 5);
             }
+
             ctx.restore();
         });
 
+        // Draw Quota
         ctx.font = "30px Arial";
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(`TARGETS: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        ctx.fillText(`ENEMIES: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+
+        super.drawParticles(ctx);
     }
 
     handleInput(x, y) {
@@ -184,6 +196,7 @@ export class BombPanic extends MiniGame {
                 if (e.type === 'bomb') {
                     // Hit Bomb!
                     this.game.sound.playGameOver();
+                    this.spawnExplosion(e.x, e.y, "#000000"); // Bomb explosion
                     this.fail();
                 } else {
                     // Hit Target
@@ -194,8 +207,12 @@ export class BombPanic extends MiniGame {
                     const accuracyFactor = 1 - (dist / e.size) * 0.5;
                     const points = Math.ceil(100 * accuracyFactor);
 
-                    this.recordHit(points);
+                    this.recordHit(points, accuracyFactor);
                     this.targetsShot++;
+
+                    // Explosion
+                    this.spawnExplosion(e.x, e.y, "#556B2F");
+
                     this.entities.splice(i, 1);
 
                     if (this.targetsShot >= this.targetQuota) {

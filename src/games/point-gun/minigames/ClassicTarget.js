@@ -116,6 +116,8 @@ export class ClassicTarget extends MiniGame {
                 this.targets.splice(i, 1);
             }
         }
+
+        super.update(dt);
     }
 
     draw(ctx) {
@@ -173,6 +175,8 @@ export class ClassicTarget extends MiniGame {
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
         ctx.fillText(`TARGETS: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+
+        super.drawParticles(ctx);
     }
 
     handleInput(x, y) {
@@ -193,8 +197,12 @@ export class ClassicTarget extends MiniGame {
                 const accuracyFactor = 1 - (dist / t.size) * 0.5;
                 const points = Math.ceil(100 * accuracyFactor);
 
-                this.recordHit(points);
+                this.recordHit(points, accuracyFactor);
                 this.targetsShot++;
+
+                // Explosion
+                this.spawnExplosion(t.x, t.y, "#ff0000");
+
                 this.targets.splice(i, 1);
 
                 if (this.targetsShot >= this.targetQuota) {
