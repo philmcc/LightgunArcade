@@ -1,0 +1,385 @@
+:root {
+  --sinden-border-color: white;
+  --sinden-border-width: 0px;
+  /* Default off */
+  --bg-color: #222;
+  --text-color: #fff;
+  --primary-color: #ff0055;
+  --secondary-color: #00ccff;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+  /* Prevent selection during gameplay */
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+  /* Prevent scrolling */
+  width: 100vw;
+  height: 100vh;
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#sinden-border {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: var(--sinden-border-width) solid var(--sinden-border-color);
+  pointer-events: none;
+  /* Let clicks pass through */
+  z-index: 9999;
+  /* Always on top */
+}
+
+#game-canvas {
+  display: block;
+  /* Canvas will be resized by JS to fit or maintain aspect ratio */
+  background-color: #000;
+  cursor: crosshair;
+}
+
+#ui-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  /* Let clicks pass through to canvas unless on a button */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* UI Elements */
+.screen {
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 2rem;
+  border-radius: 1rem;
+  border: 2px solid var(--secondary-color);
+  text-align: center;
+  backdrop-filter: blur(5px);
+}
+
+h1 {
+  font-size: 3rem;
+  color: var(--primary-color);
+  text-shadow: 2px 2px 0px #fff;
+  margin-bottom: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+button {
+  background: var(--secondary-color);
+  color: #000;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0.5rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: transform 0.1s, background 0.1s;
+  border-radius: 0.5rem;
+}
+
+button:hover {
+  background: #fff;
+  transform: scale(1.05);
+}
+
+button:active {
+  transform: scale(0.95);
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0;
+  font-size: 1.2rem;
+}
+
+.setting-row label {
+  margin-right: 1rem;
+}
+
+input[type="range"] {
+  width: 200px;
+}
+
+input[type="color"] {
+  border: none;
+  width: 50px;
+  height: 30px;
+  cursor: pointer;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Difficulty Selection */
+.difficulty-select {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.diff-btn {
+  min-width: 150px;
+  padding: 1.5rem 1rem;
+  font-size: 1.8rem;
+}
+
+.diff-btn .sub {
+  font-size: 0.8rem;
+  font-weight: normal;
+  opacity: 0.8;
+}
+
+/* Stage Intro */
+.intro {
+  animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lives {
+  font-size: 1.5rem;
+  margin-top: 2rem;
+  color: var(--secondary-color);
+}
+
+/* Stage Result */
+.result {
+  animation: bounceIn 0.5s;
+}
+
+@keyframes bounceIn {
+  0% {
+    transform: scale(0);
+  }
+
+  50% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Pause Overlay */
+#pause-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  pointer-events: auto;
+}
+
+.pause-menu {
+  animation: fadeIn 0.3s;
+}
+
+/* Stats Breakdown */
+.stats-breakdown {
+  margin-top: 2rem;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  min-width: 300px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  font-size: 1.2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.stat-row.total {
+  border-top: 2px solid var(--secondary-color);
+  border-bottom: none;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--secondary-color);
+  margin-top: 0.5rem;
+  padding-top: 1rem;
+}
+
+.stat-info {
+  text-align: center;
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+
+/* Name Entry */
+.name-entry {
+  margin: 2rem 0;
+}
+
+.name-entry label {
+  display: block;
+  margin-bottom: 1rem;
+  font-size: 1.2rem;
+}
+
+.name-entry input {
+  width: 300px;
+  padding: 1rem;
+  font-size: 1.5rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid var(--secondary-color);
+  color: #fff;
+  border-radius: 0.5rem;
+  text-transform: uppercase;
+}
+
+.name-entry input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* High Score Table */
+.highscore-table {
+  margin: 2rem 0;
+  min-width: 400px;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 50px 1fr 120px 50px;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  margin: 0.5rem 0;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 0.5rem;
+  align-items: center;
+}
+
+.score-row.top-three {
+  background: rgba(0, 204, 255, 0.1);
+  border: 1px solid rgba(0, 204, 255, 0.3);
+}
+
+.score-row .rank {
+  font-weight: bold;
+  font-size: 1.5rem;
+  color: var(--secondary-color);
+}
+
+.score-row.top-three .rank {
+  color: #ffd700;
+}
+
+.score-row .name {
+  font-size: 1.2rem;
+  text-align: left;
+}
+
+.score-row .score {
+  font-size: 1.3rem;
+  font-weight: bold;
+  text-align: right;
+}
+
+.score-row .diff-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+.no-scores {
+  padding: 3rem;
+  font-size: 1.2rem;
+  opacity: 0.7;
+}
+
+/* Debug Menu */
+.debug-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  margin: 2rem 0;
+  max-width: 800px;
+}
+
+.debug-section {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+}
+
+.debug-section h4 {
+  margin: 0 0 1rem 0;
+  color: var(--secondary-color);
+  font-size: 1.2rem;
+}
+
+.debug-btn {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.8rem;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--primary-color);
+  color: #fff;
+  cursor: pointer;
+  border-radius: 0.3rem;
+  transition: all 0.2s;
+}
+
+.debug-btn:hover {
+  background: var(--primary-color);
+  transform: translateY(-2px);
+}
