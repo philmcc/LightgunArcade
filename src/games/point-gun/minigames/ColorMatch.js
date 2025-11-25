@@ -54,8 +54,65 @@ export class ColorMatch extends MiniGame {
         this.isCountingDown = true;
         this.countdownTime = 3;
 
-        // Load background
-        this.loadBackground('/backgrounds/color_match.png');
+        // Animation state
+        this.clouds = [];
+        for (let i = 0; i < 8; i++) {
+            this.spawnCloud(true);
+        }
+        this.sunRotation = 0;
+
+        // Scenery generation
+        this.trees = [];
+        this.flowers = [];
+        this.generateScenery();
+
+        // Particle system
+        this.explosions = [];
+    }
+
+    generateScenery() {
+        const w = this.game.canvas.width;
+        const h = this.game.canvas.height;
+
+        // Trees on the mid-ground hill
+        for (let i = 0; i < 15; i++) {
+            const x = Math.random() * w;
+            // Approximate hill height at x
+            const hillY = h * 0.75 + (Math.sin(x * 0.003 + 2) * 40 + Math.sin(x * 0.01) * 10);
+            // Only place if not too low
+            if (hillY < h - 50) {
+                this.trees.push({
+                    x: x,
+                    y: hillY,
+                    scale: 0.5 + Math.random() * 0.5,
+                    type: Math.random() > 0.5 ? 'pine' : 'round'
+                });
+            }
+        }
+
+        // Flowers on the foreground hill
+        for (let i = 0; i < 50; i++) {
+            const x = Math.random() * w;
+            const hillY = h * 0.85 + (Math.sin(x * 0.005) * 20); // Simplified foreground curve approximation
+            // Ensure on screen
+            if (hillY < h) {
+                this.flowers.push({
+                    x: x,
+                    y: hillY + Math.random() * (h - hillY), // Scatter down the slope
+                    color: ['#ff69b4', '#ffff00', '#e0ffff'][Math.floor(Math.random() * 3)],
+                    scale: 0.8 + Math.random() * 0.4
+                });
+            }
+        }
+    }
+
+    spawnCloud(randomX = false) {
+        const y = Math.random() * (this.game.canvas.height * 0.4);
+        const x = randomX ? Math.random() * this.game.canvas.width : -150;
+        const scale = 0.5 + Math.random() * 0.8;
+        const speed = 20 + Math.random() * 30;
+
+        this.clouds.push({ x, y, scale, speed });
     }
 
     start() {
@@ -143,8 +200,8 @@ export class ColorMatch extends MiniGame {
             // Update lifetime
             t.lifetime += dt;
 
-            // Fade out in last 0.5 seconds
-            const fadeTime = 0.5;
+            // Fade out in last 1.0 seconds (smoother)
+            const fadeTime = 1.0;
             if (t.lifetime > t.maxLifetime - fadeTime) {
                 const fadeProgress = (t.maxLifetime - t.lifetime) / fadeTime;
                 t.opacity = Math.max(0, fadeProgress);
@@ -155,11 +212,165 @@ export class ColorMatch extends MiniGame {
                 this.targets.splice(i, 1);
             }
         }
+
+        // Update clouds
+        this.sunRotation += dt * 0.2;
+        for (let i = this.clouds.length - 1; i >= 0; i--) {
+            const c = this.clouds[i];
+            c.x += c.speed * dt;
+            if (c.x > this.game.canvas.width + 150) {
+                this.clouds.splice(i, 1);
+                this.spawnCloud();
+            }
+        }
+
+        // Update explosions
+        for (let i = this.explosions.length - 1; i >= 0; i--) {
+            const ex = this.explosions[i];
+            ex.lifetime += dt;
+            if (ex.lifetime >= ex.maxLifetime) {
+                this.explosions.splice(i, 1);
+                continue;
+            }
+
+            // Update particles
+            ex.particles.forEach(p => {
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.vy += 500 * dt; // Gravity
+                p.alpha = 1 - (ex.lifetime / ex.maxLifetime);
+            });
+        }
     }
 
     draw(ctx) {
-        // Draw background first
-        this.drawBackground(ctx);
+        const w = this.game.canvas.width;
+        const h = this.game.canvas.height;
+        const time = Date.now() * 0.001;
+
+        // --- SKY & ATMOSPHERE ---
+        // Richer sky gradient
+        const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
+        skyGrad.addColorStop(0, "#4a90e2"); // Deep Sky Blue
+        skyGrad.addColorStop(0.6, "#87cefa"); // Light Sky Blue
+        skyGrad.addColorStop(1, "#e0f7fa"); // Pale Cyan
+        ctx.fillStyle = skyGrad;
+        ctx.fillRect(0, 0, w, h);
+
+        // Sun with glow
+        ctx.save();
+        ctx.translate(w * 0.85, h * 0.15);
+        ctx.rotate(this.sunRotation);
+
+        // Sun Glow
+        const sunGlow = ctx.createRadialGradient(0, 0, 20, 0, 0, 100);
+        sunGlow.addColorStop(0, "rgba(255, 215, 0, 0.8)");
+        sunGlow.addColorStop(1, "rgba(255, 215, 0, 0)");
+        ctx.fillStyle = sunGlow;
+        ctx.beginPath();
+        ctx.arc(0, 0, 100, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Sun Core
+        ctx.fillStyle = "#FFD700";
+        ctx.beginPath();
+        ctx.arc(0, 0, 40, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // --- PARALLAX LANDSCAPE ---
+
+        // Layer 1: Distant Mountains (Slowest)
+        ctx.save();
+        ctx.fillStyle = "#6a5acd"; // Slate Blue
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let i = 0; i <= w; i += 10) {
+            const noise = Math.sin(i * 0.005 + 1) * 50 + Math.sin(i * 0.02) * 20;
+            ctx.lineTo(i, h * 0.6 + noise);
+        }
+        ctx.lineTo(w, h);
+        ctx.fill();
+        // Atmospheric haze on mountains
+        const hazeGrad = ctx.createLinearGradient(0, h * 0.5, 0, h);
+        hazeGrad.addColorStop(0, "rgba(224, 247, 250, 0)");
+        hazeGrad.addColorStop(1, "rgba(224, 247, 250, 0.5)");
+        ctx.fillStyle = hazeGrad;
+        ctx.fillRect(0, h * 0.5, w, h * 0.5);
+        ctx.restore();
+
+        // Layer 2: Rolling Hills (Mid-ground) with Trees
+        ctx.save();
+        const hillGrad = ctx.createLinearGradient(0, h * 0.6, 0, h);
+        hillGrad.addColorStop(0, "#558b2f"); // Darker Green top
+        hillGrad.addColorStop(1, "#33691e"); // Dark Green bottom
+        ctx.fillStyle = hillGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+        for (let i = 0; i <= w; i += 10) {
+            const noise = Math.sin(i * 0.003 + 2) * 40 + Math.sin(i * 0.01) * 10;
+            ctx.lineTo(i, h * 0.75 + noise);
+        }
+        ctx.lineTo(w, h);
+        ctx.fill();
+
+        // Draw Trees
+        this.trees.forEach(t => {
+            this.drawTree(ctx, t.x, t.y, t.scale, t.type);
+        });
+        ctx.restore();
+
+        // Layer 3: Foreground Grassy Hill (Closest) with Flowers
+        ctx.save();
+        const grassGrad = ctx.createLinearGradient(0, h * 0.8, 0, h);
+        grassGrad.addColorStop(0, "#7cb342"); // Light Green
+        grassGrad.addColorStop(1, "#558b2f");
+        ctx.fillStyle = grassGrad;
+        ctx.beginPath();
+        ctx.moveTo(0, h);
+
+        // More complex foreground curve
+        ctx.lineTo(0, h * 0.85);
+        for (let i = 0; i <= w; i += 20) {
+            const y = h * 0.85 + Math.sin(i * 0.002) * 30 + Math.cos(i * 0.01) * 10;
+            ctx.lineTo(i, y);
+        }
+        ctx.lineTo(w, h);
+        ctx.fill();
+
+        // Grass Texture (Noise)
+        ctx.fillStyle = "rgba(0,0,0,0.05)";
+        for (let i = 0; i < 2000; i++) {
+            const x = Math.random() * w;
+            const y = h * 0.8 + Math.random() * (h * 0.2);
+            ctx.fillRect(x, y, 2, 2);
+        }
+
+        // Draw Flowers
+        this.flowers.forEach(f => {
+            this.drawFlower(ctx, f.x, f.y, f.color, f.scale);
+        });
+        ctx.restore();
+
+        // --- VOLUMETRIC CLOUDS ---
+        this.clouds.forEach(c => {
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.scale(c.scale, c.scale);
+
+            // Cloud Shadow (offset)
+            ctx.fillStyle = "rgba(0,0,0,0.1)";
+            this.drawCloudShape(ctx, 10, 10);
+
+            // Cloud Body (Gradient for volume)
+            const cloudGrad = ctx.createLinearGradient(0, -20, 0, 20);
+            cloudGrad.addColorStop(0, "#ffffff");
+            cloudGrad.addColorStop(1, "#e1f5fe");
+            ctx.fillStyle = cloudGrad;
+            this.drawCloudShape(ctx, 0, 0);
+
+            ctx.restore();
+        });
 
         // Show countdown screen
         if (this.isCountingDown) {
@@ -173,7 +384,10 @@ export class ColorMatch extends MiniGame {
             ctx.font = "bold 60px Arial";
             ctx.fillStyle = "#ffffff";
             ctx.textAlign = "center";
+            ctx.shadowColor = "rgba(0,0,0,0.5)";
+            ctx.shadowBlur = 10;
             ctx.fillText("SHOOT ONLY:", ctx.canvas.width / 2, ctx.canvas.height / 2 - 80);
+            ctx.shadowBlur = 0;
 
             // Color name in the target color
             ctx.font = "bold 100px Arial";
@@ -191,53 +405,141 @@ export class ColorMatch extends MiniGame {
             return;
         }
 
+        // --- FURRY MONSTERS ---
         this.targets.forEach(t => {
-            // Apply opacity for fade-out
             ctx.save();
             ctx.globalAlpha = t.opacity;
+            ctx.translate(t.x, t.y);
 
-            // Main balloon body
+            // Bobbing animation
+            const bob = Math.sin(time * 5 + t.x * 0.01) * 5;
+            ctx.translate(0, bob);
+
+            const color = t.colorObj.hex;
+            const radius = t.size;
+
+            // Drop Shadow
+            ctx.fillStyle = "rgba(0,0,0,0.2)";
             ctx.beginPath();
-            ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2);
-            ctx.fillStyle = t.colorObj.hex;
+            ctx.ellipse(0, radius * 1.5, radius * 0.6, radius * 0.2, 0, 0, Math.PI * 2);
             ctx.fill();
 
-            // Balloon outline
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = "rgba(0,0,0,0.3)";
-            ctx.stroke();
-
-            // Shiny highlight (top-left)
-            const gradient = ctx.createRadialGradient(
-                t.x - t.size * 0.3, t.y - t.size * 0.3, 0,
-                t.x - t.size * 0.3, t.y - t.size * 0.3, t.size * 0.5
-            );
-            gradient.addColorStop(0, "rgba(255,255,255,0.8)");
-            gradient.addColorStop(1, "rgba(255,255,255,0)");
-            ctx.fillStyle = gradient;
+            // Fur Rendering
+            // Draw base body
+            ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(t.x, t.y, t.size, 0, Math.PI * 2);
+            ctx.arc(0, 0, radius * 0.9, 0, Math.PI * 2);
             ctx.fill();
 
-            // Balloon string
-            ctx.strokeStyle = "rgba(0,0,0,0.4)";
+            // Draw fur strands
+            ctx.strokeStyle = color;
             ctx.lineWidth = 2;
+            const strands = 24;
+            for (let i = 0; i < strands; i++) {
+                const angle = (i / strands) * Math.PI * 2;
+                const len = radius * 0.2;
+                const fx = Math.cos(angle) * radius;
+                const fy = Math.sin(angle) * radius;
+
+                // Fur variation
+                const varLen = len + Math.sin(time * 10 + i) * 2;
+
+                ctx.beginPath();
+                ctx.moveTo(Math.cos(angle) * (radius * 0.8), Math.sin(angle) * (radius * 0.8));
+                ctx.quadraticCurveTo(
+                    Math.cos(angle) * (radius + varLen * 0.5),
+                    Math.sin(angle) * (radius + varLen * 0.5),
+                    Math.cos(angle + 0.2) * (radius + varLen),
+                    Math.sin(angle + 0.2) * (radius + varLen)
+                );
+                ctx.stroke();
+            }
+
+            // Inner shading (Gradient)
+            const bodyGrad = ctx.createRadialGradient(-radius * 0.3, -radius * 0.3, 0, 0, 0, radius);
+            bodyGrad.addColorStop(0, "rgba(255,255,255,0.2)");
+            bodyGrad.addColorStop(1, "rgba(0,0,0,0.1)");
+            ctx.fillStyle = bodyGrad;
+            ctx.fill();
+
+            // Eyes (Glossy)
+            const eyeOffset = radius * 0.3;
+            const eyeSize = radius * 0.25;
+
+            // Eye Whites
+            ctx.fillStyle = "white";
             ctx.beginPath();
-            ctx.moveTo(t.x, t.y + t.size);
-            ctx.quadraticCurveTo(
-                t.x + 10, t.y + t.size + 20,
-                t.x, t.y + t.size + 30
-            );
+            ctx.arc(-eyeOffset, -radius * 0.1, eyeSize, 0, Math.PI * 2);
+            ctx.arc(eyeOffset, -radius * 0.1, eyeSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eye Shadow (top)
+            ctx.fillStyle = "rgba(0,0,0,0.1)";
+            ctx.beginPath();
+            ctx.arc(-eyeOffset, -radius * 0.1, eyeSize, Math.PI, 0);
+            ctx.arc(eyeOffset, -radius * 0.1, eyeSize, Math.PI, 0);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = "#222";
+            ctx.beginPath();
+            ctx.arc(-eyeOffset, -radius * 0.1, eyeSize * 0.4, 0, Math.PI * 2);
+            ctx.arc(eyeOffset, -radius * 0.1, eyeSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Specular Highlights (Important for realism)
+            ctx.fillStyle = "white";
+            ctx.beginPath();
+            ctx.arc(-eyeOffset - eyeSize * 0.1, -radius * 0.1 - eyeSize * 0.1, eyeSize * 0.15, 0, Math.PI * 2);
+            ctx.arc(eyeOffset - eyeSize * 0.1, -radius * 0.1 - eyeSize * 0.1, eyeSize * 0.15, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Mouth (Cute small smile)
+            ctx.strokeStyle = "rgba(0,0,0,0.5)";
+            ctx.lineWidth = 3;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.arc(0, radius * 0.2, radius * 0.15, 0.2, Math.PI - 0.2);
             ctx.stroke();
 
             ctx.restore();
         });
 
         // Draw Quota
-        ctx.font = "30px Arial";
+        ctx.font = "bold 30px Arial";
         ctx.fillStyle = this.targetColor.hex;
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 4;
         ctx.textAlign = "center";
-        ctx.fillText(`SHOOT ${this.targetColor.name}: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 4;
+
+        const text = `SHOOT ${this.targetColor.name}: ${this.targetsShot} / ${this.targetQuota}`;
+        ctx.strokeText(text, this.game.canvas.width / 2, 50);
+        ctx.fillText(text, this.game.canvas.width / 2, 50);
+        ctx.shadowBlur = 0;
+
+        // Draw Explosions
+        this.explosions.forEach(ex => {
+            ex.particles.forEach(p => {
+                ctx.save();
+                ctx.globalAlpha = p.alpha;
+                ctx.translate(p.x, p.y);
+                ctx.fillStyle = ex.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        });
+    }
+
+    drawCloudShape(ctx, ox, oy) {
+        ctx.beginPath();
+        ctx.arc(ox, oy, 30, 0, Math.PI * 2);
+        ctx.arc(ox + 25, oy - 10, 35, 0, Math.PI * 2);
+        ctx.arc(ox + 50, oy, 30, 0, Math.PI * 2);
+        ctx.fill();
     }
 
     handleInput(x, y) {
@@ -266,6 +568,10 @@ export class ColorMatch extends MiniGame {
 
                     this.recordHit(points);
                     this.targetsShot++;
+
+                    // Spawn explosion
+                    this.spawnExplosion(t.x, t.y, t.colorObj.hex);
+
                     this.targets.splice(i, 1);
 
                     if (this.targetsShot >= this.targetQuota) {
@@ -282,5 +588,98 @@ export class ColorMatch extends MiniGame {
                 return;
             }
         }
+    }
+
+    spawnExplosion(x, y, color) {
+        const particles = [];
+        const particleCount = 20;
+
+        for (let i = 0; i < particleCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 100 + Math.random() * 200;
+            particles.push({
+                x: x,
+                y: y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: 5 + Math.random() * 10,
+                alpha: 1.0
+            });
+        }
+
+        this.explosions.push({
+            particles: particles,
+            color: color,
+            lifetime: 0,
+            maxLifetime: 0.5
+        });
+    }
+    drawTree(ctx, x, y, scale, type) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+
+        // Trunk
+        ctx.fillStyle = "#5D4037";
+        ctx.fillRect(-5, 0, 10, -40);
+
+        if (type === 'pine') {
+            // Pine Tree
+            ctx.fillStyle = "#2E7D32";
+            ctx.beginPath();
+            ctx.moveTo(-20, -30);
+            ctx.lineTo(0, -80);
+            ctx.lineTo(20, -30);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(-25, -10);
+            ctx.lineTo(0, -50);
+            ctx.lineTo(25, -10);
+            ctx.fill();
+        } else {
+            // Round Tree
+            ctx.fillStyle = "#388E3C";
+            ctx.beginPath();
+            ctx.arc(0, -50, 25, 0, Math.PI * 2);
+            ctx.fill();
+            // Highlight
+            ctx.fillStyle = "#4CAF50";
+            ctx.beginPath();
+            ctx.arc(-10, -60, 10, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    drawFlower(ctx, x, y, color, scale) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(scale, scale);
+
+        // Stem
+        ctx.strokeStyle = "#4CAF50";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(5, -10, 0, -20);
+        ctx.stroke();
+
+        // Petals
+        ctx.fillStyle = color;
+        for (let i = 0; i < 5; i++) {
+            ctx.beginPath();
+            ctx.rotate((Math.PI * 2) / 5);
+            ctx.ellipse(0, -25, 5, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Center
+        ctx.fillStyle = "#FFEB3B";
+        ctx.beginPath();
+        ctx.arc(0, -25, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
     }
 }
