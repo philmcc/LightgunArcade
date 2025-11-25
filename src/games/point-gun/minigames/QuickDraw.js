@@ -9,10 +9,10 @@ export class QuickDraw extends MiniGame {
         this.state = 'WAITING'; // WAITING, DRAW, RESULT
 
         if (difficulty === 'beginner') {
-            this.reactionTime = 2.0;
+            this.reactionTime = 2.5;
             this.targetSize = 100;
         } else if (difficulty === 'medium') {
-            this.reactionTime = 1.0;
+            this.reactionTime = 1.5;
             this.targetSize = 70;
         } else {
             this.reactionTime = 0.6;
@@ -135,7 +135,13 @@ export class QuickDraw extends MiniGame {
 
             if (dist < this.target.size) {
                 this.game.sound.playHit();
-                this.recordHit(500); // Big points
+
+                // Granular scoring based on accuracy
+                // Center = 100%, Edge = 50%
+                const accuracyFactor = 1 - (dist / this.target.size) * 0.5;
+                const points = Math.ceil(500 * accuracyFactor);
+
+                this.recordHit(points); // Big points
                 this.complete();
             } else {
                 // Missed the shot!

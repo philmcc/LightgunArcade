@@ -383,3 +383,93 @@ input[type="color"] {
   background: var(--primary-color);
   transform: translateY(-2px);
 }
+
+/* Arcade Menu */
+.arcade-menu {
+  pointer-events: auto;
+  text-align: center;
+  width: 100%;
+  max-width: 1200px;
+  padding: 2rem;
+}
+
+.arcade-title {
+  font-size: 4rem;
+  color: var(--primary-color);
+  text-shadow: 3px 3px 0px #fff, 6px 6px 0px var(--secondary-color);
+  margin-bottom: 3rem;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+}
+
+.game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin: 3rem 0;
+}
+
+.game-card {
+  background: linear-gradient(135deg, rgba(255, 0, 85, 0.1), rgba(0, 204, 255, 0.1));
+  border: 3px solid var(--secondary-color);
+  border-radius: 1rem;
+  padding: 2rem;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.game-card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 10px 30px rgba(0, 204, 255, 0.5);
+  border-color: var(--primary-color);
+}
+
+.game-card.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: grayscale(0.8);
+}
+
+.game-card.locked:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--secondary-color);
+}
+
+.game-icon {
+  font-size: 5rem;
+  margin-bottom: 1rem;
+}
+
+.game-card h3 {
+  font-size: 2rem;
+  color: var(--secondary-color);
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+}
+
+.game-card p {
+  font-size: 1.2rem;
+  opacity: 0.8;
+  margin-bottom: 1rem;
+}
+
+.coming-soon {
+  display: inline-block;
+  background: var(--primary-color);
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: bold;
+  margin-top: 1rem;
+}
+
+.arcade-buttons {
+  margin-top: 3rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}

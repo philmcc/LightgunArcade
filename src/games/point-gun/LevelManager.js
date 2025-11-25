@@ -1,7 +1,7 @@
-import { ClassicTarget } from './games/ClassicTarget.js';
-import { ColorMatch } from './games/ColorMatch.js';
-import { BombPanic } from './games/BombPanic.js';
-import { QuickDraw } from './games/QuickDraw.js';
+import { ClassicTarget } from './minigames/ClassicTarget.js';
+import { ColorMatch } from './minigames/ColorMatch.js';
+import { BombPanic } from './minigames/BombPanic.js';
+import { QuickDraw } from './minigames/QuickDraw.js';
 // Import other games as they are created
 
 export class LevelManager {

@@ -1,16 +1,17 @@
-import { Settings } from './Settings.js';
-import { InputManager } from './InputManager.js';
-import { SoundManager } from './SoundManager.js';
-import { LevelManager } from './LevelManager.js';
+import { Settings } from '../../shared/Settings.js';
+import { InputManager } from '../../shared/InputManager.js';
+import { SoundManager } from '../../shared/SoundManager.js';
 import { HighScoreManager } from './HighScoreManager.js';
+import { LevelManager } from './LevelManager.js';
 
 export class Game {
-    constructor() {
-        this.canvas = document.getElementById("game-canvas");
+    constructor(canvas, uiLayer, arcade) {
+        this.canvas = canvas;
+        this.uiLayer = uiLayer;
+        this.arcade = arcade;
         this.ctx = this.canvas.getContext("2d");
-        this.uiLayer = document.getElementById("ui-layer");
 
-        this.settings = new Settings();
+        this.settings = arcade.settings;
         this.input = new InputManager(this.canvas);
         this.sound = new SoundManager();
         this.levelManager = new LevelManager(this);
@@ -59,6 +60,7 @@ export class Game {
         <button id="btn-resume">RESUME</button>
         <button id="btn-pause-settings">SETTINGS</button>
         <button id="btn-quit">QUIT TO MENU</button>
+        <button id="btn-arcade-quit">QUIT TO ARCADE</button>
       </div>
     `;
         this.uiLayer.appendChild(pauseOverlay);
@@ -71,6 +73,9 @@ export class Game {
         document.getElementById("btn-quit").onclick = () => {
             this.state = "MENU";
             this.showMenu();
+        };
+        document.getElementById("btn-arcade-quit").onclick = () => {
+            this.arcade.returnToArcade();
         };
     }
 
@@ -133,6 +138,7 @@ export class Game {
             <button id="btn-highscores">HIGH SCORES</button>
             <button id="btn-settings">SETTINGS</button>
             <button id="btn-debug" style="font-size: 0.8rem; opacity: 0.7;">DEBUG MODE</button>
+            <button id="btn-exit-arcade" style="font-size: 0.8rem; margin-top: 10px; background: #444;">EXIT TO ARCADE</button>
         </div>
       </div>
     `;
@@ -143,6 +149,7 @@ export class Game {
         document.getElementById("btn-highscores").onclick = () => this.showHighScores();
         document.getElementById("btn-settings").onclick = () => this.showSettings();
         document.getElementById("btn-debug").onclick = () => this.showDebugMenu();
+        document.getElementById("btn-exit-arcade").onclick = () => this.arcade.returnToArcade();
     }
 
     startGame(difficulty) {
@@ -257,6 +264,7 @@ export class Game {
         const submitScore = () => {
             const name = nameInput.value.trim() || "PLAYER";
             this.highScores.addScore(name, finalScore, this.levelManager.difficulty);
+            this.arcade.globalHighScores.addScore('point-gun', name, finalScore, this.levelManager.difficulty);
             this.showGameClearScreen(finalScore);
         };
 
@@ -458,7 +466,7 @@ export class Game {
         this.levelManager.isDebugMode = true;
 
         // Import the game class dynamically
-        import(`./games/${gameName}.js`).then(module => {
+        import(`./minigames/${gameName}.js`).then(module => {
             const GameClass = module[gameName];
 
             // Reset state

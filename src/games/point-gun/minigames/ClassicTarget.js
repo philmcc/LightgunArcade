@@ -11,25 +11,25 @@ export class ClassicTarget extends MiniGame {
         if (difficulty === 'beginner') {
             this.targetQuota = 10;
             this.spawnRate = 600;
-            this.targetSpeed = 300;
+            this.targetSpeed = 200;
             this.maxTargets = 5;
-            this.timeLimit = 10;
-            this.minLifetime = 1.5;
-            this.maxLifetimeRange = 1.5;
+            this.timeLimit = 20;
+            this.minLifetime = 2.0;
+            this.maxLifetimeRange = 2.0;
         } else if (difficulty === 'medium') {
             this.targetQuota = 15;
             this.spawnRate = 450;
-            this.targetSpeed = 500;
+            this.targetSpeed = 350;
             this.maxTargets = 7;
-            this.timeLimit = 10;
-            this.minLifetime = 1.2;
-            this.maxLifetimeRange = 1.3;
+            this.timeLimit = 20;
+            this.minLifetime = 1.5;
+            this.maxLifetimeRange = 1.5;
         } else {
             this.targetQuota = 20;
             this.spawnRate = 350;
             this.targetSpeed = 700;
             this.maxTargets = 8;
-            this.timeLimit = 10;
+            this.timeLimit = 20;
             this.minLifetime = 1.0;
             this.maxLifetimeRange = 1.0;
         }
@@ -187,7 +187,13 @@ export class ClassicTarget extends MiniGame {
             if (dist < t.size) {
                 // Hit!
                 this.game.sound.playHit();
-                this.recordHit(100);
+
+                // Granular scoring based on accuracy (distance from center)
+                // Center = 100%, Edge = 50%
+                const accuracyFactor = 1 - (dist / t.size) * 0.5;
+                const points = Math.ceil(100 * accuracyFactor);
+
+                this.recordHit(points);
                 this.targetsShot++;
                 this.targets.splice(i, 1);
 

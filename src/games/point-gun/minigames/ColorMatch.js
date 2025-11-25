@@ -19,25 +19,25 @@ export class ColorMatch extends MiniGame {
         if (difficulty === 'beginner') {
             this.targetQuota = 5;
             this.spawnRate = 700;
-            this.speed = 250;
+            this.speed = 150;
             this.colorsInPlay = 2;
-            this.timeLimit = 10;
-            this.minLifetime = 1.5;
-            this.maxLifetimeRange = 1.5;
+            this.timeLimit = 20;
+            this.minLifetime = 2.0;
+            this.maxLifetimeRange = 2.0;
         } else if (difficulty === 'medium') {
             this.targetQuota = 8;
             this.spawnRate = 500;
-            this.speed = 400;
+            this.speed = 300;
             this.colorsInPlay = 3;
-            this.timeLimit = 10;
-            this.minLifetime = 1.2;
-            this.maxLifetimeRange = 1.3;
+            this.timeLimit = 20;
+            this.minLifetime = 1.5;
+            this.maxLifetimeRange = 1.5;
         } else {
             this.targetQuota = 12;
             this.spawnRate = 400;
             this.speed = 550;
             this.colorsInPlay = 4;
-            this.timeLimit = 10;
+            this.timeLimit = 20;
             this.minLifetime = 1.0;
             this.maxLifetimeRange = 1.0;
         }
@@ -258,7 +258,13 @@ export class ColorMatch extends MiniGame {
                 if (t.colorObj === this.targetColor) {
                     // Correct color
                     this.game.sound.playHit();
-                    this.recordHit(200);
+
+                    // Granular scoring based on accuracy
+                    // Center = 100%, Edge = 50%
+                    const accuracyFactor = 1 - (dist / t.size) * 0.5;
+                    const points = Math.ceil(200 * accuracyFactor);
+
+                    this.recordHit(points);
                     this.targetsShot++;
                     this.targets.splice(i, 1);
 

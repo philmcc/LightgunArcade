@@ -10,18 +10,18 @@ export class BombPanic extends MiniGame {
         if (difficulty === 'beginner') {
             this.targetQuota = 5;
             this.bombCount = 2;
-            this.speed = 300;
-            this.timeLimit = 10;
+            this.speed = 200;
+            this.timeLimit = 20;
         } else if (difficulty === 'medium') {
             this.targetQuota = 10;
             this.bombCount = 4;
-            this.speed = 450;
-            this.timeLimit = 10;
+            this.speed = 350;
+            this.timeLimit = 20;
         } else {
             this.targetQuota = 15;
             this.bombCount = 6;
             this.speed = 600;
-            this.timeLimit = 10;
+            this.timeLimit = 20;
         }
 
         this.targetsShot = 0;
@@ -188,7 +188,13 @@ export class BombPanic extends MiniGame {
                 } else {
                     // Hit Target
                     this.game.sound.playHit();
-                    this.recordHit(100);
+
+                    // Granular scoring based on accuracy
+                    // Center = 100%, Edge = 50%
+                    const accuracyFactor = 1 - (dist / e.size) * 0.5;
+                    const points = Math.ceil(100 * accuracyFactor);
+
+                    this.recordHit(points);
                     this.targetsShot++;
                     this.entities.splice(i, 1);
 
