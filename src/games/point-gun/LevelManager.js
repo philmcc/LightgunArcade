@@ -28,20 +28,15 @@ export class LevelManager {
 
     setDifficulty(diff) {
         this.difficulty = diff;
-        if (diff === 'beginner') this.totalStages = 4;
-        else if (diff === 'medium') this.totalStages = 8;
-        else if (diff === 'hard') this.totalStages = 12;
-
+        // Endless mode: difficulty only affects game parameters, not stage count
         this.lives = 3;
         this.score = 0;
         this.currentStage = 0;
     }
 
     startNextStage() {
-        if (this.currentStage >= this.totalStages) {
-            this.game.gameClear(this.score);
-            return;
-        }
+        // Endless mode: No stage limit check here.
+        // Game ends only when lives <= 0 (handled in update)
 
         this.currentStage++;
 
@@ -57,29 +52,37 @@ export class LevelManager {
     }
 
     update(dt) {
-        if (this.currentGame && this.game.state === "PLAYING") {
-            this.currentGame.update(dt);
+        try {
+            if (this.currentGame && this.game.state === "PLAYING") {
+                this.currentGame.update(dt);
 
-            if (this.currentGame.isComplete) {
-                if (this.isPracticeMode) {
-                    // In practice mode, return to practice menu
-                    this.game.showStageResult(true, () => this.game.showPracticeMenu());
-                } else {
-                    this.game.showStageResult(true, () => this.startNextStage());
-                }
-            } else if (this.currentGame.isFailed) {
-                if (this.isPracticeMode) {
-                    // In practice mode, return to practice menu (but show stats first)
-                    this.game.showStageResult(false, () => this.game.showPracticeMenu());
-                } else {
-                    this.lives--;
-                    if (this.lives <= 0) {
-                        this.game.gameOver();
+                if (this.currentGame.isComplete) {
+                    if (this.isPracticeMode) {
+                        // In practice mode, return to practice menu
+                        this.game.showStageResult(true, () => this.game.showPracticeMenu());
                     } else {
-                        this.game.showStageResult(false, () => this.startNextStage());
+                        this.game.showStageResult(true, () => this.startNextStage());
+                    }
+                } else if (this.currentGame.isFailed) {
+                    if (this.isPracticeMode) {
+                        // In practice mode, return to practice menu (but show stats first)
+                        this.game.showStageResult(false, () => this.game.showPracticeMenu());
+                    } else {
+                        this.lives--;
+                        if (this.lives <= 0) {
+                            this.game.gameOver();
+                        } else {
+                            this.game.showStageResult(false, () => this.startNextStage());
+                        }
                     }
                 }
             }
+        } catch (e) {
+            console.error("Error in LevelManager update:", e);
+            // Alert the user to the error for debugging
+            alert("Game Error: " + e.message);
+            // Attempt to recover by going to menu
+            this.game.showMenu();
         }
     }
 

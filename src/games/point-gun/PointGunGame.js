@@ -130,9 +130,9 @@ export class Game {
       <div class="screen">
         <h1>POINT BLANK WEB</h1>
         <div class="difficulty-select">
-            <button id="btn-beginner" class="diff-btn">BEGINNER<br><span class="sub">4 STAGES</span></button>
-            <button id="btn-medium" class="diff-btn">MEDIUM<br><span class="sub">8 STAGES</span></button>
-            <button id="btn-hard" class="diff-btn">HARD<br><span class="sub">12 STAGES</span></button>
+            <button id="btn-beginner" class="diff-btn">BEGINNER</button>
+            <button id="btn-medium" class="diff-btn">MEDIUM</button>
+            <button id="btn-hard" class="diff-btn">HARD</button>
         </div>
         <div style="margin-top: 20px;">
             <button id="btn-highscores">HIGH SCORES</button>
@@ -158,6 +158,17 @@ export class Game {
         this.levelManager.startNextStage();
     }
 
+    showHUD() {
+        this.uiLayer.innerHTML = `
+            <div style="position: absolute; top: 20px; left: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
+                SCORE: <span id="score-display">${this.levelManager.score}</span>
+            </div>
+            <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
+                LIVES: ${this.levelManager.lives}
+            </div>
+        `;
+    }
+
     showStageIntro(stageNum, objective, callback) {
         this.state = "INTRO";
         this.uiLayer.innerHTML = `
@@ -169,80 +180,89 @@ export class Game {
     `;
 
         setTimeout(() => {
-            this.uiLayer.innerHTML = `
-            <div style="position: absolute; top: 20px; left: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                SCORE: <span id="score-display">${this.levelManager.score}</span>
-            </div>
-            <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                LIVES: ${this.levelManager.lives}
-            </div>
-        `;
+            this.showHUD();
             callback();
         }, 2000);
     }
 
     showStageResult(success, callback) {
-        this.state = "RESULT";
-        const msg = success ? "STAGE CLEAR!" : "LIFE LOST!";
-        const color = success ? "#00ccff" : "#ff0055";
+        try {
+            this.state = "RESULT";
+            const msg = success ? "STAGE CLEAR!" : "LIFE LOST!";
+            const color = success ? "#00ccff" : "#ff0055";
 
-        let statsHTML = '';
-        // Show stats if success OR if in practice mode (even if failed)
-        if ((success || this.levelManager.isPracticeMode) && this.levelManager.currentGame) {
-            const game = this.levelManager.currentGame;
-            const bonuses = game.calculateBonuses();
-            const accuracy = game.getAccuracy();
-            const time = game.getCompletionTime();
+            let statsHTML = '';
+            // Show stats always (success or fail) as long as we have a game instance
+            if (this.levelManager.currentGame) {
+                const game = this.levelManager.currentGame;
+                const bonuses = game.calculateBonuses();
+                const accuracy = game.getAccuracy();
+                const time = game.getCompletionTime();
 
-            // Award bonuses
-            this.levelManager.score += bonuses.total;
+                // Award bonuses
+                const roundTotal = bonuses.total + game.stats.baseScore;
+                this.levelManager.score += bonuses.total; // Add bonuses to global score (base score already added during game)
 
-            statsHTML = `
-        <div class="stats-breakdown">
-          <div class="stat-row">
-            <span>Base Score:</span>
-            <span>${game.stats.baseScore}</span>
-          </div>
-          <div class="stat-row">
-            <span>Difficulty (${game.difficulty.toUpperCase()}):</span>
-            <span>x${game.scoreMultiplier}</span>
-          </div>
-          <div class="stat-row">
-            <span>Accuracy (${accuracy.toFixed(1)}%):</span>
-            <span>+${bonuses.accuracy}</span>
-          </div>
-          <div class="stat-row">
-            <span>Pinpoint (${bonuses.pinpointPercent.toFixed(1)}%):</span>
-            <span>+${bonuses.pinpoint}</span>
-          </div>
-          <div class="stat-row">
-            <span>Speed Bonus:</span>
-            <span>+${bonuses.speed}</span>
-          </div>
-          <div class="stat-row total">
-            <span>Stage Total:</span>
-            <span>${game.stats.baseScore + bonuses.total}</span>
-          </div>
-          <div class="stat-info">
-            ${game.stats.hits}/${game.stats.shots} hits • ${time.toFixed(1)}s
-          </div>
-        </div>
-      `;
-        }
+                statsHTML = `
+            <div class="stats-breakdown">
+              <div class="stat-row">
+                <span>Base Score:</span>
+                <span>${game.stats.baseScore}</span>
+              </div>
+              <div class="stat-row">
+                <span>Difficulty (${game.difficulty.toUpperCase()}):</span>
+                <span>x${game.scoreMultiplier}</span>
+              </div>
+              <div class="stat-row">
+                <span>Accuracy (${accuracy.toFixed(1)}%):</span>
+                <span>+${bonuses.accuracy}</span>
+              </div>
+              <div class="stat-row">
+                <span>Pinpoint (${bonuses.pinpointPercent.toFixed(1)}%):</span>
+                <span>+${bonuses.pinpoint}</span>
+              </div>
+              <div class="stat-row">
+                <span>Speed Bonus:</span>
+                <span>+${bonuses.speed}</span>
+              </div>
+              
+              <div class="stat-divider" style="margin: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3);"></div>
 
-        this.uiLayer.innerHTML += `
-        <div class="screen result" style="border-color: ${color}">
-            <h1 style="color: ${color}">${msg}</h1>
-            ${statsHTML}
-            <button id="btn-next" style="margin-top: 20px;">NEXT</button>
-        </div>
-    `;
+              <div class="stat-row total" style="font-size: 1.2em; color: #ffff00;">
+                <span>ROUND SCORE:</span>
+                <span>${roundTotal}</span>
+              </div>
+              <div class="stat-row total" style="font-size: 1.4em; color: #00ff00; margin-top: 5px;">
+                <span>TOTAL SCORE:</span>
+                <span>${this.levelManager.score}</span>
+              </div>
 
-        const btnNext = document.getElementById('btn-next');
-        btnNext.onclick = () => {
+              <div class="stat-info">
+                ${game.stats.hits}/${game.stats.shots} hits • ${time.toFixed(1)}s
+              </div>
+            </div>
+          `;
+            }
+
+            this.uiLayer.innerHTML = `
+            <div class="screen result" style="border-color: ${color}">
+                <h1 style="color: ${color}">${msg}</h1>
+                ${statsHTML}
+                <button id="btn-next" style="margin-top: 20px;">NEXT</button>
+            </div>
+        `;
+
+            const btnNext = document.getElementById('btn-next');
+            if (btnNext) {
+                btnNext.onclick = () => {
+                    callback();
+                };
+                btnNext.focus();
+            }
+        } catch (e) {
+            console.error("Error in showStageResult:", e);
             callback();
-        };
-        btnNext.focus();
+        }
     }
 
     gameClear(finalScore) {
@@ -262,8 +282,8 @@ export class Game {
         <h1>NEW HIGH SCORE!</h1>
         <h2>SCORE: ${finalScore}</h2>
         <div class="name-entry">
-          <label>ENTER YOUR NAME:</label>
-          <input type="text" id="player-name" maxlength="10" value="PLAYER" autocomplete="off">
+            <label>ENTER YOUR NAME:</label>
+            <input type="text" id="player-name" maxlength="10" value="PLAYER" autocomplete="off">
         </div>
         <button id="btn-submit">SUBMIT</button>
       </div>
@@ -277,7 +297,12 @@ export class Game {
             const name = nameInput.value.trim() || "PLAYER";
             this.highScores.addScore(name, finalScore, this.levelManager.difficulty);
             this.arcade.globalHighScores.addScore('point-gun', name, finalScore, this.levelManager.difficulty);
-            this.showGameClearScreen(finalScore);
+            // After submitting, check if it was game clear or game over
+            if (this.levelManager.lives > 0) {
+                this.showGameClearScreen(finalScore);
+            } else {
+                this.showGameOverScreen(finalScore);
+            }
         };
 
         document.getElementById("btn-submit").onclick = submitScore;
@@ -303,10 +328,20 @@ export class Game {
     gameOver() {
         this.state = "GAMEOVER";
         this.sound.playGameOver();
+        const finalScore = this.levelManager.score;
+
+        if (this.highScores.isHighScore(finalScore)) {
+            this.showNameEntry(finalScore);
+        } else {
+            this.showGameOverScreen(finalScore);
+        }
+    }
+
+    showGameOverScreen(finalScore) {
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>GAME OVER</h1>
-        <h2>SCORE: ${this.levelManager.score}</h2>
+        <h2>SCORE: ${finalScore}</h2>
         <button id="btn-retry">RETRY</button>
         <button id="btn-menu">MENU</button>
       </div>
@@ -381,6 +416,9 @@ export class Game {
             if (this.state === "PAUSED_SETTINGS") {
                 // Return to pause menu
                 this.state = "PAUSED";
+                // Restore the game HUD first
+                this.showHUD();
+                // Then show the pause overlay
                 this.showPauseMenu();
             } else {
                 // Return to main menu

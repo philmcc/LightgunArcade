@@ -167,7 +167,7 @@ export class ColorMatch extends MiniGame {
             return;
         }
 
-        this.timeLimit -= dt;
+        // this.timeLimit -= dt; // Handled in MiniGame.js
 
         // Play tick sound in last 5 seconds
         if (this.timeLimit <= 5 && this.timeLimit > 0) {

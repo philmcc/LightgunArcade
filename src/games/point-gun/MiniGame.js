@@ -62,6 +62,11 @@ export class MiniGame {
     }
 
     update(dt) {
+        // Decrement time limit
+        if (this.timeLimit > 0) {
+            this.timeLimit -= dt;
+        }
+
         // Update explosions
         for (let i = this.explosions.length - 1; i >= 0; i--) {
             const ex = this.explosions[i];
@@ -113,20 +118,38 @@ export class MiniGame {
         this.shotIndicators.forEach(ind => {
             ctx.save();
             ctx.globalAlpha = 1 - (ind.lifetime / 0.5);
-            ctx.strokeStyle = "#ff0000";
-            ctx.lineWidth = 2;
+            ctx.translate(ind.x, ind.y);
+
+            // Bullet Hole / Laser Burn Effect
+            const color = ind.color || '#00ccff'; // Default to Blue
+
+            // 1. Outer Glow (Increased size by 50%: 20 -> 30)
+            const gradient = ctx.createRadialGradient(0, 0, 7.5, 0, 0, 30);
+            gradient.addColorStop(0, color);
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = gradient;
             ctx.beginPath();
-            ctx.arc(ind.x, ind.y, 5, 0, Math.PI * 2);
-            ctx.moveTo(ind.x - 8, ind.y);
-            ctx.lineTo(ind.x + 8, ind.y);
-            ctx.moveTo(ind.x, ind.y - 8);
-            ctx.lineTo(ind.x, ind.y + 8);
+            ctx.arc(0, 0, 30, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 2. The Hole (Dark center) (Increased size by 50%: 6 -> 9)
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.arc(0, 0, 9, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 3. Cracks / Jagged edges
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3; // Thicker lines
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const len = 12 + Math.random() * 12; // Longer cracks (8->12, 8->12)
+                ctx.moveTo(Math.cos(angle) * 9, Math.sin(angle) * 9); // Start from edge of hole (6->9)
+                ctx.lineTo(Math.cos(angle) * len, Math.sin(angle) * len);
+            }
             ctx.stroke();
 
-            // Draw "SHOT" text
-            ctx.fillStyle = "#ff0000";
-            ctx.font = "10px Arial";
-            ctx.fillText("SHOT", ind.x + 10, ind.y - 10);
             ctx.restore();
         });
     }
@@ -134,7 +157,9 @@ export class MiniGame {
     handleInput(x, y) {
         // Handle shots
         this.stats.shots++;
-        this.spawnShotIndicator(x, y);
+        // Fixed shot color (Blue) - Red reserved for Player 2
+        const color = '#00ccff';
+        this.spawnShotIndicator(x, y, color);
     }
 
     spawnExplosion(x, y, color) {
@@ -162,10 +187,11 @@ export class MiniGame {
         });
     }
 
-    spawnShotIndicator(x, y) {
+    spawnShotIndicator(x, y, color = '#ff0000') {
         this.shotIndicators.push({
             x: x,
             y: y,
+            color: color,
             lifetime: 0
         });
     }
