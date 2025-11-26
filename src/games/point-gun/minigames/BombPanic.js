@@ -27,6 +27,16 @@ export class BombPanic extends MiniGame {
         this.targetsShot = 0;
         this.lastTickTime = 0;
 
+        // Spawn configuration
+        if (difficulty === 'beginner') {
+            this.spawnRate = 1000; // ms
+        } else if (difficulty === 'medium') {
+            this.spawnRate = 700;
+        } else {
+            this.spawnRate = 500;
+        }
+        this.lastSpawn = 0;
+
         // Load background
         this.loadBackground('/backgrounds/bomb_panic.png');
     }
@@ -58,7 +68,7 @@ export class BombPanic extends MiniGame {
     }
 
     update(dt) {
-        this.timeLimit -= dt;
+        // this.timeLimit -= dt; // Handled in MiniGame.js
 
         // Play tick sound in last 5 seconds
         if (this.timeLimit <= 5 && this.timeLimit > 0) {
@@ -73,20 +83,27 @@ export class BombPanic extends MiniGame {
             return;
         }
 
-        // Ensure enough targets
-        const targets = this.entities.filter(e => e.type === 'target');
-        if (targets.length < 3) {
+        // Spawn new targets if below quota
+        if (Date.now() - this.lastSpawn > this.spawnRate && this.entities.filter(e => e.type === 'target').length < 5) {
             this.spawnEntity('target');
+            this.lastSpawn = Date.now();
         }
 
-        this.entities.forEach(e => {
+        for (let i = this.entities.length - 1; i >= 0; i--) {
+            const e = this.entities[i];
+
             e.x += e.vx * dt;
             e.y += e.vy * dt;
-            e.rotation += dt * 2;
 
             if (e.x - e.size < 0 || e.x + e.size > this.game.canvas.width) e.vx *= -1;
             if (e.y - e.size < 0 || e.y + e.size > this.game.canvas.height) e.vy *= -1;
-        });
+
+            if (e.type === 'bomb') {
+                e.rotation += dt * 2;
+            }
+        }
+
+        super.update(dt);
     }
 
     draw(ctx) {
@@ -97,78 +114,146 @@ export class BombPanic extends MiniGame {
             ctx.save();
             ctx.translate(e.x, e.y);
 
-            if (e.type === 'bomb') {
-                // Draw Bomb with better graphics
-                // Main bomb body
-                ctx.fillStyle = "#1a1a1a";
+            if (e.type === 'target') {
+                // 3D Military Target with depth
+
+                // Shadow
+                ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
                 ctx.beginPath();
-                ctx.arc(0, 0, e.size, 0, Math.PI * 2);
+                ctx.ellipse(e.size * 0.15, e.size * 1.1, e.size * 0.8, e.size * 0.15, 0, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Bomb highlight
-                const gradient = ctx.createRadialGradient(-e.size * 0.3, -e.size * 0.3, 0, 0, 0, e.size);
-                gradient.addColorStop(0, "rgba(80,80,80,0.8)");
-                gradient.addColorStop(1, "rgba(0,0,0,0)");
+                // Base sphere with gradient for 3D effect
+                const gradient = ctx.createRadialGradient(
+                    -e.size * 0.3, -e.size * 0.3, e.size * 0.1,
+                    0, 0, e.size
+                );
+                gradient.addColorStop(0, "#7a9b5a"); // Lighter olive (highlight)
+                gradient.addColorStop(0.4, "#556B2F"); // Dark Olive Green
+                gradient.addColorStop(1, "#3a4a1f"); // Darker edge (shadow)
                 ctx.fillStyle = gradient;
                 ctx.beginPath();
                 ctx.arc(0, 0, e.size, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Fuse
-                ctx.strokeStyle = "#8B4513";
+                // Rim highlight
+                ctx.strokeStyle = "#8FBC8F";
                 ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.moveTo(0, -e.size);
-                ctx.quadraticCurveTo(15, -e.size - 15, 25, -e.size - 10);
+                ctx.arc(0, 0, e.size * 0.85, 0, Math.PI * 2);
                 ctx.stroke();
 
-                // Fuse spark
-                ctx.fillStyle = "#ff6600";
+                // Inner ring with gradient
+                const innerGrad = ctx.createRadialGradient(
+                    -e.size * 0.2, -e.size * 0.2, e.size * 0.1,
+                    0, 0, e.size * 0.7
+                );
+                innerGrad.addColorStop(0, "#9bc76a");
+                innerGrad.addColorStop(1, "#6a8b3f");
+                ctx.fillStyle = innerGrad;
                 ctx.beginPath();
-                ctx.arc(25, -e.size - 10, 5, 0, Math.PI * 2);
+                ctx.arc(0, 0, e.size * 0.7, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Danger symbol
-                ctx.fillStyle = "#ff0000";
-                ctx.font = "bold 40px Arial";
+                // Crosshair with shadow
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 3;
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(-e.size * 0.6, 0);
+                ctx.lineTo(e.size * 0.6, 0);
+                ctx.moveTo(0, -e.size * 0.6);
+                ctx.lineTo(0, e.size * 0.6);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Skull icon with glow
+                ctx.shadowColor = "rgba(255, 255, 255, 0.5)";
+                ctx.shadowBlur = 5;
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 24px Arial";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("☠", 0, 0);
+                ctx.shadowBlur = 0;
 
             } else {
-                // Draw military-style Target
-                // Camouflage base
+                // 3D Bomb
+                ctx.rotate(e.rotation);
+
+                // Shadow
+                ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+                ctx.beginPath();
+                ctx.ellipse(e.size * 0.2, e.size * 1.15, e.size * 0.85, e.size * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Bomb body with metallic gradient (3D sphere)
+                const bombGrad = ctx.createRadialGradient(
+                    -e.size * 0.35, -e.size * 0.35, e.size * 0.2,
+                    0, 0, e.size
+                );
+                bombGrad.addColorStop(0, "#444"); // Highlight
+                bombGrad.addColorStop(0.3, "#222");
+                bombGrad.addColorStop(0.7, "#000"); // Main body
+                bombGrad.addColorStop(1, "#111"); // Dark edge
+                ctx.fillStyle = bombGrad;
                 ctx.beginPath();
                 ctx.arc(0, 0, e.size, 0, Math.PI * 2);
-                ctx.fillStyle = "#4a5a3a";
                 ctx.fill();
 
-                // Orange center (military target style)
+                // Specular highlight for glossy effect
+                ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
                 ctx.beginPath();
-                ctx.arc(0, 0, e.size * 0.6, 0, Math.PI * 2);
-                ctx.fillStyle = "#ff6600";
+                ctx.arc(-e.size * 0.35, -e.size * 0.35, e.size * 0.25, 0, Math.PI * 2);
                 ctx.fill();
 
-                // White center dot
+                // Fuse with shadow
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 4;
+                ctx.strokeStyle = "#8B4513";
+                ctx.lineWidth = 6;
+                ctx.lineCap = "round";
                 ctx.beginPath();
-                ctx.arc(0, 0, e.size * 0.2, 0, Math.PI * 2);
-                ctx.fillStyle = "#ffffff";
-                ctx.fill();
-
-                // Border
-                ctx.strokeStyle = "#333";
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(0, 0, e.size, 0, Math.PI * 2);
+                ctx.moveTo(0, -e.size);
+                ctx.quadraticCurveTo(10, -e.size - 10, 20, -e.size - 5);
                 ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                // Spark with glow animation
+                const sparkSize = 6 + Math.random() * 4;
+                ctx.shadowColor = "#FF4500";
+                ctx.shadowBlur = 15;
+                const sparkGrad = ctx.createRadialGradient(20, -e.size - 5, 0, 20, -e.size - 5, sparkSize);
+                sparkGrad.addColorStop(0, "#FFD700");
+                sparkGrad.addColorStop(0.5, "#FF4500");
+                sparkGrad.addColorStop(1, "#8B0000");
+                ctx.fillStyle = sparkGrad;
+                ctx.beginPath();
+                ctx.arc(20, -e.size - 5, sparkSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Danger symbol with glow
+                ctx.shadowColor = "rgba(255, 0, 0, 0.6)";
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = "#ff0000";
+                ctx.font = "bold 28px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("!", 0, 5);
+                ctx.shadowBlur = 0;
             }
             ctx.restore();
         });
 
+        // Draw Quota
         ctx.font = "30px Arial";
         ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(`TARGETS: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        ctx.fillText(`ENEMIES: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+
+        super.drawParticles(ctx);
     }
 
     handleInput(x, y) {
@@ -184,6 +269,7 @@ export class BombPanic extends MiniGame {
                 if (e.type === 'bomb') {
                     // Hit Bomb!
                     this.game.sound.playGameOver();
+                    this.spawnExplosion(e.x, e.y, "#000000"); // Bomb explosion
                     this.fail();
                 } else {
                     // Hit Target
@@ -194,8 +280,12 @@ export class BombPanic extends MiniGame {
                     const accuracyFactor = 1 - (dist / e.size) * 0.5;
                     const points = Math.ceil(100 * accuracyFactor);
 
-                    this.recordHit(points);
+                    this.recordHit(points, accuracyFactor);
                     this.targetsShot++;
+
+                    // Explosion
+                    this.spawnExplosion(e.x, e.y, "#556B2F");
+
                     this.entities.splice(i, 1);
 
                     if (this.targetsShot >= this.targetQuota) {
