@@ -27,6 +27,16 @@ export class BombPanic extends MiniGame {
         this.targetsShot = 0;
         this.lastTickTime = 0;
 
+        // Spawn configuration
+        if (difficulty === 'beginner') {
+            this.spawnRate = 1000; // ms
+        } else if (difficulty === 'medium') {
+            this.spawnRate = 700;
+        } else {
+            this.spawnRate = 500;
+        }
+        this.lastSpawn = 0;
+
         // Load background
         this.loadBackground('/backgrounds/bomb_panic.png');
     }
@@ -73,8 +83,9 @@ export class BombPanic extends MiniGame {
             return;
         }
 
-        if (Date.now() - this.lastSpawn > this.spawnRate) {
-            this.spawnEntity();
+        // Spawn new targets if below quota
+        if (Date.now() - this.lastSpawn > this.spawnRate && this.entities.filter(e => e.type === 'target').length < 5) {
+            this.spawnEntity('target');
             this.lastSpawn = Date.now();
         }
 
@@ -104,73 +115,135 @@ export class BombPanic extends MiniGame {
             ctx.translate(e.x, e.y);
 
             if (e.type === 'target') {
-                // Military-style Target
-                ctx.fillStyle = "#556B2F"; // Dark Olive Green
+                // 3D Military Target with depth
+
+                // Shadow
+                ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+                ctx.beginPath();
+                ctx.ellipse(e.size * 0.15, e.size * 1.1, e.size * 0.8, e.size * 0.15, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Base sphere with gradient for 3D effect
+                const gradient = ctx.createRadialGradient(
+                    -e.size * 0.3, -e.size * 0.3, e.size * 0.1,
+                    0, 0, e.size
+                );
+                gradient.addColorStop(0, "#7a9b5a"); // Lighter olive (highlight)
+                gradient.addColorStop(0.4, "#556B2F"); // Dark Olive Green
+                gradient.addColorStop(1, "#3a4a1f"); // Darker edge (shadow)
+                ctx.fillStyle = gradient;
                 ctx.beginPath();
                 ctx.arc(0, 0, e.size, 0, Math.PI * 2);
                 ctx.fill();
 
-                ctx.strokeStyle = "#8FBC8F"; // Dark Sea Green
-                ctx.lineWidth = 3;
+                // Rim highlight
+                ctx.strokeStyle = "#8FBC8F";
+                ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.arc(0, 0, e.size * 0.8, 0, Math.PI * 2);
+                ctx.arc(0, 0, e.size * 0.85, 0, Math.PI * 2);
                 ctx.stroke();
 
-                // Crosshair
+                // Inner ring with gradient
+                const innerGrad = ctx.createRadialGradient(
+                    -e.size * 0.2, -e.size * 0.2, e.size * 0.1,
+                    0, 0, e.size * 0.7
+                );
+                innerGrad.addColorStop(0, "#9bc76a");
+                innerGrad.addColorStop(1, "#6a8b3f");
+                ctx.fillStyle = innerGrad;
+                ctx.beginPath();
+                ctx.arc(0, 0, e.size * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Crosshair with shadow
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 3;
                 ctx.strokeStyle = "#fff";
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 3;
                 ctx.beginPath();
                 ctx.moveTo(-e.size * 0.6, 0);
                 ctx.lineTo(e.size * 0.6, 0);
                 ctx.moveTo(0, -e.size * 0.6);
                 ctx.lineTo(0, e.size * 0.6);
                 ctx.stroke();
+                ctx.shadowBlur = 0;
 
-                // Skull icon (simplified)
+                // Skull icon with glow
+                ctx.shadowColor = "rgba(255, 255, 255, 0.5)";
+                ctx.shadowBlur = 5;
                 ctx.fillStyle = "#fff";
-                ctx.font = "20px Arial";
+                ctx.font = "bold 24px Arial";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("☠", 0, 0);
+                ctx.shadowBlur = 0;
 
             } else {
-                // Bomb
+                // 3D Bomb
                 ctx.rotate(e.rotation);
 
-                // Bomb Body
-                ctx.fillStyle = "#000";
+                // Shadow
+                ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+                ctx.beginPath();
+                ctx.ellipse(e.size * 0.2, e.size * 1.15, e.size * 0.85, e.size * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Bomb body with metallic gradient (3D sphere)
+                const bombGrad = ctx.createRadialGradient(
+                    -e.size * 0.35, -e.size * 0.35, e.size * 0.2,
+                    0, 0, e.size
+                );
+                bombGrad.addColorStop(0, "#444"); // Highlight
+                bombGrad.addColorStop(0.3, "#222");
+                bombGrad.addColorStop(0.7, "#000"); // Main body
+                bombGrad.addColorStop(1, "#111"); // Dark edge
+                ctx.fillStyle = bombGrad;
                 ctx.beginPath();
                 ctx.arc(0, 0, e.size, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Highlight
-                ctx.fillStyle = "#333";
+                // Specular highlight for glossy effect
+                ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
                 ctx.beginPath();
-                ctx.arc(-e.size * 0.3, -e.size * 0.3, e.size * 0.2, 0, Math.PI * 2);
+                ctx.arc(-e.size * 0.35, -e.size * 0.35, e.size * 0.25, 0, Math.PI * 2);
                 ctx.fill();
 
-                // Fuse
+                // Fuse with shadow
+                ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+                ctx.shadowBlur = 4;
                 ctx.strokeStyle = "#8B4513";
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 6;
+                ctx.lineCap = "round";
                 ctx.beginPath();
                 ctx.moveTo(0, -e.size);
                 ctx.quadraticCurveTo(10, -e.size - 10, 20, -e.size - 5);
                 ctx.stroke();
+                ctx.shadowBlur = 0;
 
-                // Spark
-                ctx.fillStyle = "#FF4500";
+                // Spark with glow animation
+                const sparkSize = 6 + Math.random() * 4;
+                ctx.shadowColor = "#FF4500";
+                ctx.shadowBlur = 15;
+                const sparkGrad = ctx.createRadialGradient(20, -e.size - 5, 0, 20, -e.size - 5, sparkSize);
+                sparkGrad.addColorStop(0, "#FFD700");
+                sparkGrad.addColorStop(0.5, "#FF4500");
+                sparkGrad.addColorStop(1, "#8B0000");
+                ctx.fillStyle = sparkGrad;
                 ctx.beginPath();
-                ctx.arc(20, -e.size - 5, 5 + Math.random() * 3, 0, Math.PI * 2);
+                ctx.arc(20, -e.size - 5, sparkSize, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.shadowBlur = 0;
 
-                // Skull on bomb
-                ctx.fillStyle = "red";
-                ctx.font = "24px Arial";
+                // Danger symbol with glow
+                ctx.shadowColor = "rgba(255, 0, 0, 0.6)";
+                ctx.shadowBlur = 8;
+                ctx.fillStyle = "#ff0000";
+                ctx.font = "bold 28px Arial";
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
                 ctx.fillText("!", 0, 5);
+                ctx.shadowBlur = 0;
             }
-
             ctx.restore();
         });
 
