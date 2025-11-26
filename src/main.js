@@ -1,6 +1,7 @@
 import './style.css';
 import { ArcadeManager } from './arcade/ArcadeManager.js';
 import { Game as PointGunGame } from './games/point-gun/PointGunGame.js';
+import { Game as NotDuckHuntGame } from './games/not-duck-hunt/NotDuckHuntGame.js';
 
 const canvas = document.getElementById('game-canvas');
 const uiLayer = document.getElementById('ui-layer');
@@ -15,6 +16,15 @@ arcade.registerGame({
   description: 'Fast-paced target shooting',
   isAvailable: true,
   gameClass: PointGunGame
+});
+
+// Register Not Duck Hunt game
+arcade.registerGame({
+  id: 'not-duck-hunt',
+  name: 'Not Duck Hunt',
+  description: 'Classic shooting gallery',
+  isAvailable: true,
+  gameClass: NotDuckHuntGame
 });
 
 // Register placeholder games
