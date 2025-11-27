@@ -1,17 +1,15 @@
+import { BaseGame } from '../../arcade/interfaces/BaseGame.js';
 import { InputManager } from '../../shared/InputManager.js';
 import { SoundManager } from '../../shared/SoundManager.js';
 import { HighScoreManager } from './HighScoreManager.js';
 import { RoundManager } from './RoundManager.js';
 import { BackgroundManager } from './BackgroundManager.js';
 
-export class Game {
-    constructor(canvas, uiLayer, arcade) {
-        this.canvas = canvas;
-        this.uiLayer = uiLayer;
-        this.arcade = arcade;
-        this.ctx = this.canvas.getContext("2d");
+export class Game extends BaseGame {
+    constructor(canvas, uiLayer, system) {
+        super(canvas, uiLayer, system);
 
-        this.settings = arcade.settings;
+        this.settings = system.settings;
         this.input = new InputManager(this.canvas);
         this.sound = new SoundManager();
         this.roundManager = new RoundManager(this);
@@ -30,24 +28,58 @@ export class Game {
         this.dogDuration = 1.5;
 
         // Resize handling
-        window.addEventListener("resize", () => this.resize());
+        this.resizeHandler = () => this.resize();
+        window.addEventListener("resize", this.resizeHandler);
         this.resize();
 
         // Bind input
         this.input.on("shoot", (coords) => this.handleShoot(coords));
 
         // Bind ESC key for pause
-        window.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && this.state === "PLAYING") {
-                this.showPauseMenu();
+        this.keydownHandler = (e) => {
+            if (e.key === "Escape" && (this.state === "PLAYING" || this.state === "PAUSED")) {
+                this.togglePause();
             }
-        });
+        };
+        window.addEventListener("keydown", this.keydownHandler);
+    }
 
-        // Start loop
-        this.loop = this.loop.bind(this);
-        requestAnimationFrame(this.loop);
+    static getManifest() {
+        return {
+            id: 'not-duck-hunt',
+            name: 'Not Duck Hunt',
+            description: 'Classic shooting gallery',
+            isAvailable: true
+        };
+    }
 
+    async init() {
         this.showMenu();
+    }
+
+    destroy() {
+        window.removeEventListener("resize", this.resizeHandler);
+        window.removeEventListener("keydown", this.keydownHandler);
+        if (this.input && this.input.destroy) {
+            this.input.destroy();
+        }
+    }
+
+    togglePause() {
+        if (this.state === "PLAYING") {
+            this.state = "PAUSED";
+            this.showPauseMenu();
+        } else if (this.state === "PAUSED") {
+            this.state = "PLAYING";
+            this.hidePauseMenu();
+        }
+    }
+
+    hidePauseMenu() {
+        const pauseOverlay = document.getElementById('pause-overlay');
+        if (pauseOverlay) {
+            pauseOverlay.remove();
+        }
     }
 
     resize() {
@@ -95,66 +127,48 @@ export class Game {
         }
     }
 
-    draw() {
+    draw(ctx) {
         // Only draw game background when playing or in round-related states
-        if (this.state === "PLAYING" || this.state === "ROUND_INTRO" || this.state === "ROUND_RESULT") {
-            this.backgroundManager.draw(this.ctx, this.canvas.width, this.canvas.height);
+        if (this.state === "PLAYING" || this.state === "PAUSED" || this.state === "ROUND_INTRO" || this.state === "ROUND_RESULT") {
+            this.backgroundManager.draw(ctx, this.canvas.width, this.canvas.height);
         } else {
             // Clear with solid color for menu states
-            this.ctx.fillStyle = "#222";
-            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.fillStyle = "#222";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-        if (this.state === "PLAYING") {
-            this.roundManager.draw(this.ctx);
-            this.drawHitEffects();
+        if (this.state === "PLAYING" || this.state === "PAUSED") {
+            this.roundManager.draw(ctx);
+            this.drawHitEffects(ctx);
         }
     }
 
-    drawHitEffects() {
+    drawHitEffects(ctx) {
         this.hitEffects.forEach(effect => {
             effect.particles.forEach(p => {
-                this.ctx.save();
-                this.ctx.globalAlpha = p.alpha;
-                this.ctx.fillStyle = '#ffd700';
-                this.ctx.beginPath();
-                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                this.ctx.fill();
-                this.ctx.restore();
+                ctx.globalAlpha = p.alpha;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
             });
         });
+        ctx.globalAlpha = 1;
     }
 
-    spawnHitEffect(x, y) {
-        const particles = [];
-        for (let i = 0; i < 15; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const speed = 100 + Math.random() * 150;
-            particles.push({
-                x: x,
-                y: y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 50,
-                size: 3 + Math.random() * 5,
-                alpha: 1.0
-            });
+    updateScoreDisplay() {
+        const scoreEl = document.getElementById('score-display');
+        if (scoreEl) {
+            scoreEl.textContent = this.roundManager.score;
         }
-
-        this.hitEffects.push({
-            particles: particles,
-            lifetime: 0,
-            maxLifetime: 0.8
-        });
     }
 
-    loop(timestamp) {
-        const dt = (timestamp - this.lastTime) / 1000;
-        this.lastTime = timestamp;
-
-        this.update(dt);
-        this.draw();
-
-        requestAnimationFrame(this.loop);
+    hideDog() {
+        // Implementation for hiding dog if it was a DOM element, 
+        // but it seems the dog might be drawn on canvas in RoundManager?
+        // If it's a DOM element:
+        const dogEl = document.getElementById('dog-overlay');
+        if (dogEl) dogEl.remove();
     }
 
     showMenu() {
@@ -162,11 +176,11 @@ export class Game {
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>NOT DUCK HUNT</h1>
-        <p style="font-size: 1.2rem; margin: 1rem 0; opacity: 0.8;">Classic Shooting Gallery</p>
-        
-        <button id="btn-start" style="font-size: 2rem; padding: 1.5rem 3rem;">START GAME</button>
-        
-        <div style="margin-top: 2rem;">
+        <div class="difficulty-select">
+            <button id="btn-campaign" class="diff-btn">CAMPAIGN</button>
+            <button id="btn-endless" class="diff-btn">ENDLESS</button>
+        </div>
+        <div style="margin-top: 20px;">
             <button id="btn-highscores">HIGH SCORES</button>
             <button id="btn-settings">SETTINGS</button>
             <button id="btn-exit-arcade" style="font-size: 0.8rem; margin-top: 10px; background: #444;">EXIT TO ARCADE</button>
@@ -174,367 +188,15 @@ export class Game {
       </div>
     `;
 
-        document.getElementById("btn-start").onclick = () => this.showModeSelect();
+        document.getElementById("btn-campaign").onclick = () => this.startGame('campaign');
+        document.getElementById("btn-endless").onclick = () => this.startGame('endless');
         document.getElementById("btn-highscores").onclick = () => this.showHighScores();
         document.getElementById("btn-settings").onclick = () => this.showSettings();
-        document.getElementById("btn-exit-arcade").onclick = () => this.arcade.returnToArcade();
+        document.getElementById("btn-exit-arcade").onclick = () => this.system.returnToArcade();
     }
 
-    showModeSelect() {
-        this.state = "MODE_SELECT";
-        this.uiLayer.innerHTML = `
-      <div class="screen">
-        <h2>SELECT MODE</h2>
-        <div class="difficulty-select" style="margin: 2rem 0;">
-            <button id="btn-campaign" class="diff-btn">
-                CAMPAIGN
-                <div class="sub">10 Rounds</div>
-            </button>
-            <button id="btn-endless" class="diff-btn">
-                ENDLESS
-                <div class="sub">Until Game Over</div>
-            </button>
-        </div>
-        <button id="btn-back">BACK</button>
-      </div>
-    `;
-
-        document.getElementById("btn-campaign").onclick = () => {
-            this.roundManager.setGameMode('campaign');
-            this.showDifficultySelect();
-        };
-        document.getElementById("btn-endless").onclick = () => {
-            this.roundManager.setGameMode('endless');
-            this.showDifficultySelect();
-        };
-        document.getElementById("btn-back").onclick = () => this.showMenu();
-    }
-
-    showDifficultySelect() {
-        this.state = "DIFFICULTY_SELECT";
-        this.uiLayer.innerHTML = `
-      <div class="screen">
-        <h2>SELECT DIFFICULTY</h2>
-        <div class="difficulty-select">
-            <button id="btn-beginner" class="diff-btn">
-                BEGINNER
-                <div class="sub">6/10 targets to pass</div>
-            </button>
-            <button id="btn-medium" class="diff-btn">
-                MEDIUM
-                <div class="sub">7/10 targets | 1-2 at once</div>
-            </button>
-            <button id="btn-hard" class="diff-btn">
-                HARD
-                <div class="sub">8/10 targets | 2-3 at once</div>
-            </button>
-        </div>
-        <button id="btn-back">BACK</button>
-      </div>
-    `;
-
-        document.getElementById("btn-beginner").onclick = () => this.startGame('beginner');
-        document.getElementById("btn-medium").onclick = () => this.startGame('medium');
-        document.getElementById("btn-hard").onclick = () => this.startGame('hard');
-        document.getElementById("btn-back").onclick = () => this.showModeSelect();
-    }
-
-    startGame(difficulty) {
-        this.roundManager.setDifficulty(difficulty);
-        this.roundManager.score = 0;
-        this.roundManager.currentRound = 0;
-        this.roundManager.lives = 3;
-        this.roundManager.startNewRound();
-    }
-
-    showRoundIntro(roundNumber, callback) {
-        this.state = "ROUND_INTRO";
-        this.backgroundManager.setForRound(roundNumber);
-
-        const bgName = this.backgroundManager.getCurrentBackground().name;
-
-        this.uiLayer.innerHTML = `
-        <div class="screen intro">
-            <h1>ROUND ${roundNumber}</h1>
-            <p style="font-size: 1.5rem; margin: 1rem 0;">${bgName}</p>
-            <div class="lives">SCORE: ${this.roundManager.score} | LIVES: ${this.roundManager.lives}</div>
-        </div>
-    `;
-
-        setTimeout(() => {
-            try {
-                this.showHUD();
-                this.state = "PLAYING";
-                callback();
-            } catch (e) {
-                console.error("Error starting round:", e);
-                // Fallback to menu if error occurs
-                this.showMenu();
-            }
-        }, 2000);
-    }
-
-    showBonusRoundIntro(callback) {
-        this.state = "ROUND_INTRO";
-        this.uiLayer.innerHTML = `
-        <div class="screen intro" style="border-color: #ffd700;">
-            <h1 style="color: #ffd700;">BONUS ROUND!</h1>
-            <p style="font-size: 1.8rem;">Clay Pigeon Shooting</p>
-            <p style="font-size: 1.2rem; margin-top: 1rem; opacity: 0.8;">No penalty for misses!</p>
-        </div>
-    `;
-
-        setTimeout(() => {
-            this.showHUD();
-            this.state = "PLAYING";
-            callback();
-        }, 2500);
-    }
-
-    showHUD() {
-        this.uiLayer.innerHTML = `
-            <div style="position: absolute; top: 20px; left: 20px; font-size: 28px; color: #fff; font-weight: bold; text-shadow: 2px 2px 4px #000;">
-                SCORE: <span id="score-display">${this.roundManager.score}</span>
-            </div>
-            <div style="position: absolute; top: 20px; right: 20px; font-size: 28px; color: #fff; font-weight: bold; text-shadow: 2px 2px 4px #000;">
-                ROUND: ${this.roundManager.currentRound}
-            </div>
-            <div id="ammo-display" style="position: absolute; top: 70px; right: 20px; display: flex; gap: 10px;">
-                ${this.getAmmoHTML(3)}
-            </div>
-            
-            <!-- Round Progress Indicator -->
-            <div id="round-progress" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 20px;">
-                ${this.getProgressHTML()}
-            </div>
-
-            <div id="dog-container" style="position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); display: none;">
-            </div>
-        `;
-    }
-
-    getAmmoHTML(count) {
-        let html = '';
-        for (let i = 0; i < 3; i++) {
-            if (i < count) {
-                html += `<div style="width: 30px; height: 30px; background: #ff6600; border-radius: 50%; border: 3px solid #fff;"></div>`;
-            } else {
-                html += `<div style="width: 30px; height: 30px; background: #333; border-radius: 50%; border: 3px solid #666;"></div>`;
-            }
-        }
-        return html;
-    }
-
-    getProgressHTML() {
-        let html = '';
-        const total = this.roundManager.targetsPerRound;
-        const hits = this.roundManager.targetsHit;
-        const misses = this.roundManager.targetsMissed;
-        const current = hits + misses;
-
-        for (let i = 0; i < total; i++) {
-            let color = '#fff'; // Pending
-            let icon = '⚪';
-            let extraStyle = '';
-
-            if (i < hits) {
-                color = '#00ff00'; // Hit
-                icon = '🦆';
-            } else if (i < hits + misses) {
-                color = '#ff0000'; // Miss
-                icon = '❌';
-            } else if (i === current) {
-                // Current active target
-                color = '#ffff00'; // Yellow
-                icon = '🎯';
-                extraStyle = 'transform: scale(1.3); box-shadow: 0 0 10px #ffff00; border-color: #ffff00; z-index: 10;';
-            }
-
-            html += `<div style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: ${color}; border-radius: 50%; border: 2px solid #000; font-size: 16px; transition: all 0.2s; ${extraStyle}">${icon}</div>`;
-        }
-        return html;
-    }
-
-    updateAmmoDisplay(count) {
-        const ammoDisplay = document.getElementById('ammo-display');
-        if (ammoDisplay) {
-            ammoDisplay.innerHTML = this.getAmmoHTML(count);
-        }
-    }
-
-    updateScoreDisplay() {
-        const scoreDisplay = document.getElementById('score-display');
-        if (scoreDisplay) {
-            scoreDisplay.textContent = this.roundManager.score;
-        }
-
-        // Also update progress
-        const progressDisplay = document.getElementById('round-progress');
-        if (progressDisplay) {
-            progressDisplay.innerHTML = this.getProgressHTML();
-        }
-    }
-
-    showDogLaugh() {
-        this.showingDog = true;
-        this.dogTimer = 0;
-
-        const dogContainer = document.getElementById('dog-container');
-        if (dogContainer) {
-            dogContainer.style.display = 'block';
-            dogContainer.innerHTML = `
-                <div style="background: rgba(0,0,0,0.8); padding: 2rem; border-radius: 1rem; border: 3px solid #ff0055;">
-                    <div style="font-size: 4rem;">🐕</div>
-                    <p style="font-size: 1.5rem; color: #ff0055; font-weight: bold; margin-top: 0.5rem;">HA HA HA!</p>
-                </div>
-            `;
-        }
-
-        // Play laugh sound (placeholder - will add to SoundManager)
-        // this.sound.playDogLaugh();
-    }
-
-    hideDog() {
-        const dogContainer = document.getElementById('dog-container');
-        if (dogContainer) {
-            dogContainer.style.display = 'none';
-        }
-    }
-
-    showRoundResult(success, targetsHit, targetsTotal, callback) {
-        this.state = "ROUND_RESULT";
-        const msg = success ? "ROUND CLEAR!" : "ROUND FAILED!";
-        const color = success ? "#00ff00" : "#ff0055";
-
-        this.uiLayer.innerHTML = `
-            <div class="screen result" style="border-color: ${color}">
-                <h1 style="color: ${color}">${msg}</h1>
-                <div style="font-size: 2rem; margin: 2rem 0;">
-                    Targets Hit: ${targetsHit} / ${targetsTotal}
-                </div>
-                <div style="font-size: 1.5rem; margin: 1rem 0;">
-                    Score: ${this.roundManager.score}
-                </div>
-                ${!success && this.roundManager.gameMode === 'endless' ?
-                `<div style="font-size: 1.3rem; color: #ff0055;">Lives Remaining: ${this.roundManager.lives}</div>` :
-                ''
-            }
-                <button id="btn-continue" style="margin-top: 2rem;">CONTINUE</button>
-            </div>
-        `;
-
-        document.getElementById('btn-continue').onclick = () => callback();
-    }
-
-    showBonusRoundResult(targetsHit, callback) {
-        this.state = "ROUND_RESULT";
-        const bonusScore = targetsHit * 250;
-
-        this.uiLayer.innerHTML = `
-            <div class="screen result" style="border-color: #ffd700">
-                <h1 style="color: #ffd700">BONUS ROUND COMPLETE!</h1>
-                <div style="font-size: 2rem; margin: 2rem 0;">
-                    Clay Pigeons Hit: ${targetsHit} / 15
-                </div>
-                <div style="font-size: 1.8rem; color: #ffd700; margin: 1rem 0;">
-                    Bonus Points: +${bonusScore}
-                </div>
-                <div style="font-size: 1.5rem;">
-                    Total Score: ${this.roundManager.score}
-                </div>
-                <button id="btn-continue" style="margin-top: 2rem;">CONTINUE</button>
-            </div>
-        `;
-
-        document.getElementById('btn-continue').onclick = () => callback();
-    }
-
-    gameClear() {
-        this.state = "GAME_OVER";
-        this.sound.playGameOver();
-        const finalScore = this.roundManager.score;
-
-        if (this.highScores.isHighScore(finalScore)) {
-            this.showNameEntry(finalScore, true);
-        } else {
-            this.showGameClearScreen(finalScore);
-        }
-    }
-
-    gameOver() {
-        this.state = "GAME_OVER";
-        this.sound.playGameOver();
-        const finalScore = this.roundManager.score;
-
-        if (this.highScores.isHighScore(finalScore)) {
-            this.showNameEntry(finalScore, false);
-        } else {
-            this.showGameOverScreen(finalScore);
-        }
-    }
-
-    showNameEntry(finalScore, isGameClear) {
-        this.uiLayer.innerHTML = `
-      <div class="screen">
-        <h1>NEW HIGH SCORE!</h1>
-        <h2>SCORE: ${finalScore}</h2>
-        <div class="name-entry">
-            <label>ENTER YOUR NAME:</label>
-            <input type="text" id="player-name" maxlength="10" value="PLAYER" autocomplete="off">
-        </div>
-        <button id="btn-submit">SUBMIT</button>
-      </div>
-    `;
-
-        const nameInput = document.getElementById("player-name");
-        nameInput.focus();
-        nameInput.select();
-
-        const submitScore = () => {
-            const name = nameInput.value.trim() || "PLAYER";
-            this.highScores.addScore(name, finalScore, this.roundManager.difficulty, this.roundManager.gameMode);
-            this.arcade.globalHighScores.addScore('not-duck-hunt', name, finalScore, this.roundManager.difficulty);
-
-            if (isGameClear) {
-                this.showGameClearScreen(finalScore);
-            } else {
-                this.showGameOverScreen(finalScore);
-            }
-        };
-
-        document.getElementById("btn-submit").onclick = submitScore;
-        nameInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") submitScore();
-        });
-    }
-
-    showGameClearScreen(finalScore) {
-        this.uiLayer.innerHTML = `
-      <div class="screen">
-        <h1 style="color: #00ff00;">GAME CLEAR!</h1>
-        <h2>ALL ROUNDS COMPLETE</h2>
-        <h3>FINAL SCORE: ${finalScore}</h3>
-        <button id="btn-highscores">HIGH SCORES</button>
-        <button id="btn-menu">MENU</button>
-      </div>
-    `;
-        document.getElementById("btn-highscores").onclick = () => this.showHighScores();
-        document.getElementById("btn-menu").onclick = () => this.showMenu();
-    }
-
-    showGameOverScreen(finalScore) {
-        this.uiLayer.innerHTML = `
-      <div class="screen">
-        <h1>GAME OVER</h1>
-        <h2>SCORE: ${finalScore}</h2>
-        <h3>Round Reached: ${this.roundManager.currentRound}</h3>
-        <button id="btn-retry">PLAY AGAIN</button>
-        <button id="btn-menu">MENU</button>
-      </div>
-    `;
-
-        document.getElementById("btn-retry").onclick = () => this.showModeSelect();
-        document.getElementById("btn-menu").onclick = () => this.showMenu();
+    startGame(mode) {
+        this.roundManager.startGame(mode);
     }
 
     showPauseMenu() {
@@ -551,21 +213,19 @@ export class Game {
         this.uiLayer.appendChild(pauseOverlay);
 
         document.getElementById("btn-resume").onclick = () => {
-            pauseOverlay.remove();
-            this.state = "PLAYING";
+            this.togglePause();
         };
         document.getElementById("btn-quit").onclick = () => {
-            pauseOverlay.remove();
+            this.hidePauseMenu();
             this.showMenu();
         };
         document.getElementById("btn-arcade-quit").onclick = () => {
-            this.arcade.returnToArcade();
+            this.system.returnToArcade();
         };
     }
 
     showSettings() {
-        // Reuse the same settings from the arcade
-        this.arcade.showSettings();
+        this.system.showSettings();
     }
 
     showHighScores() {
@@ -577,7 +237,7 @@ export class Game {
         } else {
             scoresHTML = '<div class="highscore-table">';
             scores.forEach((score, index) => {
-                const diffBadge = score.difficulty.charAt(0).toUpperCase();
+                const diffBadge = score.difficulty ? score.difficulty.charAt(0).toUpperCase() : '-';
                 const modeBadge = score.gameMode === 'campaign' ? 'C' : 'E';
                 scoresHTML += `
                     <div class="score-row ${index < 3 ? 'top-three' : ''}">
@@ -604,5 +264,222 @@ export class Game {
         `;
 
         document.getElementById("btn-back").onclick = () => this.showMenu();
+    }
+
+    showRoundIntro(roundNum, callback) {
+        this.state = "ROUND_INTRO";
+        this.uiLayer.innerHTML = `
+            <div class="screen intro">
+                <h2>ROUND ${roundNum}</h2>
+                <h1>GET READY</h1>
+                <div class="lives">LIVES: ${this.roundManager.lives}</div>
+            </div>
+        `;
+        setTimeout(() => {
+            this.uiLayer.innerHTML = ''; // Clear intro
+            this.state = "PLAYING"; // Set state to playing
+            this.showHUD();
+            callback();
+        }, 2000);
+    }
+
+    showBonusRoundIntro(callback) {
+        this.state = "ROUND_INTRO";
+        this.uiLayer.innerHTML = `
+            <div class="screen intro" style="border-color: #ffd700;">
+                <h2 style="color: #ffd700;">BONUS ROUND</h2>
+                <h1>SHOOT THE CLAY PIGEONS!</h1>
+                <div class="lives">UNLIMITED AMMO</div>
+            </div>
+        `;
+        setTimeout(() => {
+            this.uiLayer.innerHTML = '';
+            this.state = "PLAYING"; // Set state to playing
+            this.showHUD();
+            callback();
+        }, 2000);
+    }
+
+    showRoundResult(success, hits, total, callback) {
+        this.state = "ROUND_RESULT";
+        const msg = success ? "ROUND CLEAR" : "FAILED";
+        const color = success ? "#00ccff" : "#ff0055";
+
+        this.uiLayer.innerHTML = `
+            <div class="screen result" style="border-color: ${color}">
+                <h1 style="color: ${color}">${msg}</h1>
+                <div class="stats-breakdown">
+                    <div class="stat-row">
+                        <span>HITS:</span>
+                        <span>${hits} / ${total}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            this.uiLayer.innerHTML = '';
+            callback();
+        }, 2000);
+    }
+
+    showBonusRoundResult(hits, callback) {
+        this.state = "ROUND_RESULT";
+        const bonus = hits * 100;
+        this.roundManager.score += bonus;
+
+        this.uiLayer.innerHTML = `
+            <div class="screen result" style="border-color: #ffd700;">
+                <h1 style="color: #ffd700;">BONUS COMPLETE</h1>
+                <div class="stats-breakdown">
+                    <div class="stat-row">
+                        <span>HITS:</span>
+                        <span>${hits}</span>
+                    </div>
+                    <div class="stat-row total" style="color: #ffd700;">
+                        <span>BONUS:</span>
+                        <span>+${bonus}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        setTimeout(() => {
+            this.uiLayer.innerHTML = '';
+            callback();
+        }, 2500);
+    }
+
+    showHUD() {
+        this.uiLayer.innerHTML = `
+            <div style="position: absolute; top: 20px; left: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
+                SCORE: <span id="score-display">${this.roundManager.score}</span>
+            </div>
+            <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
+                LIVES: ${this.roundManager.lives}
+            </div>
+            <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
+                ROUND ${this.roundManager.currentRound}
+            </div>
+            <div style="position: absolute; bottom: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
+                AMMO: <span id="ammo-display">III</span>
+            </div>
+        `;
+    }
+
+    updateAmmoDisplay(shots) {
+        const ammoEl = document.getElementById('ammo-display');
+        if (ammoEl) {
+            ammoEl.textContent = 'I'.repeat(Math.max(0, shots));
+        }
+    }
+
+    showDogLaugh() {
+        this.showingDog = true;
+        this.dogTimer = 0;
+        this.sound.playDogLaugh();
+        // Dog visual would be handled here if we had the asset/logic
+        // For now just a text overlay
+        const dogOverlay = document.createElement('div');
+        dogOverlay.id = 'dog-overlay';
+        dogOverlay.style.position = 'absolute';
+        dogOverlay.style.bottom = '100px';
+        dogOverlay.style.left = '50%';
+        dogOverlay.style.transform = 'translateX(-50%)';
+        dogOverlay.style.fontSize = '40px';
+        dogOverlay.style.color = '#fff';
+        dogOverlay.style.textShadow = '2px 2px 0 #000';
+        dogOverlay.textContent = 'HA HA HA!';
+        this.uiLayer.appendChild(dogOverlay);
+    }
+
+    spawnHitEffect(x, y) {
+        this.hitEffects.push({
+            x: x,
+            y: y,
+            lifetime: 0,
+            maxLifetime: 0.5,
+            particles: Array.from({ length: 10 }, () => ({
+                x: x,
+                y: y,
+                vx: (Math.random() - 0.5) * 200,
+                vy: (Math.random() - 0.5) * 200,
+                size: Math.random() * 3 + 2,
+                color: '#fff',
+                alpha: 1
+            }))
+        });
+    }
+
+    gameClear() {
+        this.state = "GAME_OVER";
+        this.sound.playGameClear();
+        this.handleGameOver(true);
+    }
+
+    gameOver() {
+        this.state = "GAME_OVER";
+        this.sound.playGameOver();
+        this.handleGameOver(false);
+    }
+
+    handleGameOver(cleared) {
+        const finalScore = this.roundManager.score;
+        const difficulty = this.roundManager.difficulty;
+
+        // Check local high score
+        if (this.highScores.isHighScore(finalScore)) {
+            this.showNameEntry(finalScore, cleared);
+        } else {
+            this.showGameOverScreen(finalScore, cleared);
+        }
+    }
+
+    showNameEntry(finalScore, cleared) {
+        this.uiLayer.innerHTML = `
+            <div class="screen">
+                <h1>NEW HIGH SCORE!</h1>
+                <h2>SCORE: ${finalScore}</h2>
+                <div class="name-entry">
+                    <label>ENTER YOUR NAME:</label>
+                    <input type="text" id="player-name" maxlength="10" value="${this.system.auth.getCurrentUser().name}" autocomplete="off">
+                </div>
+                <button id="btn-submit">SUBMIT</button>
+            </div>
+        `;
+
+        const nameInput = document.getElementById("player-name");
+        nameInput.focus();
+        nameInput.select();
+
+        const submitScore = () => {
+            const name = nameInput.value.trim() || "PLAYER";
+            // Save to local game scores
+            this.highScores.addScore(name, finalScore, this.roundManager.difficulty, this.roundManager.gameMode);
+            // Save to global system scores
+            this.system.globalHighScores.addScore('not-duck-hunt', name, finalScore, this.roundManager.difficulty);
+
+            this.showGameOverScreen(finalScore, cleared);
+        };
+
+        document.getElementById("btn-submit").onclick = submitScore;
+        nameInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") submitScore();
+        });
+    }
+
+    showGameOverScreen(finalScore, cleared) {
+        const title = cleared ? "ALL ROUNDS CLEARED!" : "GAME OVER";
+        this.uiLayer.innerHTML = `
+            <div class="screen">
+                <h1>${title}</h1>
+                <h2>SCORE: ${finalScore}</h2>
+                <button id="btn-retry">RETRY</button>
+                <button id="btn-menu">MENU</button>
+            </div>
+        `;
+
+        document.getElementById("btn-retry").onclick = () => this.startGame(this.roundManager.gameMode);
+        document.getElementById("btn-menu").onclick = () => this.showMenu();
     }
 }

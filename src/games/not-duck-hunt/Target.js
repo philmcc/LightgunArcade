@@ -5,11 +5,11 @@ export class Target {
         this.canvasHeight = canvasHeight;
 
         // Base properties (to be overridden)
-        this.baseSize = 80;
+        this.baseSize = 180; // Increased size (50% bigger than 120)
         this.size = this.baseSize;
         this.basePoints = 100;
-        this.speedMultiplier = 1.0;
-        this.hitboxMultiplier = 1.0;
+        this.speedMultiplier = 0.6;
+        this.hitboxMultiplier = 0.7; // Smaller hitbox relative to very large sprite
 
         // State
         this.x = 0;
@@ -23,7 +23,10 @@ export class Target {
         // Animation
         this.animationFrame = 0;
         this.animationTimer = 0;
-        this.animationSpeed = 0.15; // seconds per frame
+        this.animationSpeed = 0.08; // Faster animation for smoothness
+        this.frameCount = 3;
+        this.spriteCols = 3; // Default to horizontal strip
+        this.spriteRows = 1;
         this.rotation = 0;
 
         // Flight pattern
@@ -39,57 +42,79 @@ export class Target {
         this.isBonus = false;
     }
 
-    loadSprite(imagePath) {
-        this.sprite = new Image();
-        this.sprite.onload = () => {
+    loadSprite(imagePath, frameCount = 3, cols = 0, rows = 1) {
+        this.frameCount = frameCount;
+        this.spriteCols = cols || frameCount; // Default cols to frameCount if not specified
+        this.spriteRows = rows;
+        const img = new Image();
+        img.onload = () => {
+            // Create a temporary canvas to process the image
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+
+            // Draw image
+            ctx.drawImage(img, 0, 0);
+
+            // Get image data
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            // Loop through pixels and make white transparent
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // If pixel is near white (allow some variance for compression artifacts)
+                if (r > 240 && g > 240 && b > 240) {
+                    data[i + 3] = 0; // Set alpha to 0
+                }
+            }
+
+            // Put modified data back
+            ctx.putImageData(imageData, 0, 0);
+
+            // Store the canvas directly as the sprite
+            this.sprite = canvas;
             this.spriteLoaded = true;
         };
-        this.sprite.src = imagePath;
+        img.src = imagePath;
     }
 
     spawn(difficulty, roundNumber) {
-        // Safety margin from edges to keep targets fully visible
+        // Safety margin to spawn fully off-screen
         const margin = this.size;
 
-        // Determine spawn edge (0=top, 1=right, 2=bottom, 3=left)
-        const edge = Math.floor(Math.random() * 4);
+        // Determine spawn side (0=left, 1=right)
+        const side = Math.random() < 0.5 ? 0 : 1;
 
-        // Base speed increases with round number
-        const baseSpeed = 150 + (roundNumber * 20);
+        // Base speed increases slightly with round number
+        const baseSpeed = 100 + (roundNumber * 10);
         const speed = baseSpeed * this.speedMultiplier;
 
-        // Spawn position and velocity based on edge - targets start INSIDE screen
-        switch (edge) {
-            case 0: // Top - spawn at top edge, move downward/diagonal
-                this.x = margin + Math.random() * (this.canvasWidth - margin * 2);
-                this.y = margin;
-                this.vx = (Math.random() - 0.5) * speed * 0.8;
-                this.vy = speed * (0.5 + Math.random() * 0.5);
-                break;
-            case 1: // Right - spawn at right edge, move leftward/diagonal
-                this.x = this.canvasWidth - margin;
-                this.y = margin + Math.random() * (this.canvasHeight - margin * 2);
-                this.vx = -speed * (0.5 + Math.random() * 0.5);
-                this.vy = (Math.random() - 0.5) * speed * 0.8;
-                break;
-            case 2: // Bottom - spawn at bottom edge, move upward/diagonal
-                this.x = margin + Math.random() * (this.canvasWidth - margin * 2);
-                this.y = this.canvasHeight - margin;
-                this.vx = (Math.random() - 0.5) * speed * 0.8;
-                this.vy = -speed * (0.5 + Math.random() * 0.5);
-                break;
-            case 3: // Left - spawn at left edge, move rightward/diagonal
-                this.x = margin;
-                this.y = margin + Math.random() * (this.canvasHeight - margin * 2);
-                this.vx = speed * (0.5 + Math.random() * 0.5);
-                this.vy = (Math.random() - 0.5) * speed * 0.8;
-                break;
+        // Spawn position and velocity
+        // Spawn in the upper 60% of the screen (sky area)
+        const minY = margin;
+        const maxY = this.canvasHeight * 0.6;
+        this.y = minY + Math.random() * (maxY - minY);
+
+        if (side === 0) { // Left -> Right
+            this.x = -margin;
+            this.vx = speed * (0.8 + Math.random() * 0.4);
+        } else { // Right -> Left
+            this.x = this.canvasWidth + margin;
+            this.vx = -speed * (0.8 + Math.random() * 0.4);
         }
 
+        // More varied vertical movement for interesting flight paths
+        this.vy = (Math.random() - 0.5) * speed * 0.3;
+
         // Set flight pattern based on difficulty
-        const patterns = ['linear', 'curved', 'zigzag'];
+        const patterns = ['linear', 'curved'];
         if (difficulty === 'hard' && roundNumber > 3) {
-            patterns.push('erratic', 'erratic'); // Higher chance of erratic
+            patterns.push('zigzag');
         }
         this.flightPattern = patterns[Math.floor(Math.random() * patterns.length)];
     }
@@ -97,7 +122,7 @@ export class Target {
     update(dt) {
         if (this.isHit) {
             // Fall animation
-            this.y += 300 * dt;
+            this.y += 400 * dt;
             this.rotation += 5 * dt;
 
             if (this.y > this.canvasHeight + this.size) {
@@ -121,35 +146,17 @@ export class Target {
 
         switch (this.flightPattern) {
             case 'linear':
-                // No changes, maintain velocity
+                // Maintain velocity
                 break;
 
             case 'curved':
-                // Add gravity effect
-                this.vy += 100 * dt;
+                // More pronounced sine wave for variety
+                this.vy += Math.cos(this.patternTimer * 3) * 80 * dt;
                 break;
 
             case 'zigzag':
-                // Oscillate horizontally
-                const zigzagSpeed = 200;
-                this.vx = Math.sin(this.patternTimer * 3) * zigzagSpeed;
-                break;
-
-            case 'erratic':
-                // Random direction changes
-                if (this.patternTimer > this.patternChangeInterval) {
-                    this.patternTimer = 0;
-                    this.vx += (Math.random() - 0.5) * 200;
-                    this.vy += (Math.random() - 0.5) * 200;
-
-                    // Clamp speed
-                    const currentSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
-                    const maxSpeed = 500;
-                    if (currentSpeed > maxSpeed) {
-                        this.vx = (this.vx / currentSpeed) * maxSpeed;
-                        this.vy = (this.vy / currentSpeed) * maxSpeed;
-                    }
-                }
+                // More dramatic turns
+                this.vy = Math.sin(this.patternTimer * 6) * 150;
                 break;
         }
 
@@ -161,14 +168,15 @@ export class Target {
         this.animationTimer += dt;
         if (this.animationTimer > this.animationSpeed) {
             this.animationTimer = 0;
-            this.animationFrame = (this.animationFrame + 1) % 3; // 3 frame animation
+            this.animationFrame = (this.animationFrame + 1) % this.frameCount;
         }
 
-        // Check if escaped off screen
+        // Check if escaped off screen (opposite side)
         const margin = this.size * 2;
-        if (this.x < -margin || this.x > this.canvasWidth + margin ||
-            this.y < -margin || this.y > this.canvasHeight + margin) {
+        if ((this.vx > 0 && this.x > this.canvasWidth + margin) ||
+            (this.vx < 0 && this.x < -margin)) {
             this.isEscaped = true;
+            this.isOffScreen = true; // Mark as off-screen immediately for horizontal escape
         }
     }
 
@@ -180,13 +188,37 @@ export class Target {
         ctx.rotate(this.rotation);
 
         if (this.spriteLoaded && this.sprite) {
-            // Draw sprite with slight bobbing animation
-            const bobOffset = Math.sin(this.animationTimer * 10) * 2;
+            // Draw sprite with animation
+            const frameWidth = this.sprite.width / this.spriteCols;
+            const frameHeight = this.sprite.height / this.spriteRows;
 
-            // Flip sprite based on direction
-            if (this.vx < 0) {
-                ctx.scale(-1, 1);
+            // Calculate col and row for current frame
+            const col = this.animationFrame % this.spriteCols;
+            const row = Math.floor(this.animationFrame / this.spriteCols);
+
+            // Flip sprite based on direction and default orientation
+            // Default assumption: Sprite faces RIGHT
+            // If vx < 0 (moving left), we flip.
+            // If sprite faces LEFT by default, we need to invert this.
+
+            let scaleX = 1;
+            // Only flip based on direction if not set to consistent direction
+            if (this.consistentDirection) {
+                // Flip to face movement direction (sprite naturally faces left)
+                if (this.vx > 0) {
+                    scaleX = -1; // Flip when moving right
+                }
+            } else {
+                if (this.vx < 0) {
+                    scaleX = -1;
+                }
+
+                if (this.facesLeft) {
+                    scaleX *= -1;
+                }
             }
+
+            ctx.scale(scaleX, 1);
 
             // Add golden glow if bonus
             if (this.isBonus) {
@@ -194,12 +226,23 @@ export class Target {
                 ctx.shadowBlur = 20;
             }
 
+            // Draw the sprite frame
+            // For sprites with multiple birds (like pigeon), use only half the width
+            let sourceWidth = Math.floor(frameWidth);
+            if (this.useSpriteHalf === 'left') {
+                sourceWidth = Math.floor(frameWidth / 2);
+            }
+
             ctx.drawImage(
                 this.sprite,
+                Math.floor(col * frameWidth),
+                Math.floor(row * frameHeight),
+                sourceWidth,
+                Math.floor(frameHeight), // Source rectangle
                 -this.size / 2,
-                -this.size / 2 + bobOffset,
+                -this.size / 2,
                 this.size,
-                this.size
+                this.size // Destination rectangle
             );
         } else {
             // Fallback colored circle

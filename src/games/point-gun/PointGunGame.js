@@ -1,17 +1,14 @@
-import { Settings } from '../../shared/Settings.js';
+import { BaseGame } from '../../arcade/interfaces/BaseGame.js';
 import { InputManager } from '../../shared/InputManager.js';
 import { SoundManager } from '../../shared/SoundManager.js';
 import { HighScoreManager } from './HighScoreManager.js';
 import { LevelManager } from './LevelManager.js';
 
-export class Game {
-    constructor(canvas, uiLayer, arcade) {
-        this.canvas = canvas;
-        this.uiLayer = uiLayer;
-        this.arcade = arcade;
-        this.ctx = this.canvas.getContext("2d");
+export class Game extends BaseGame {
+    constructor(canvas, uiLayer, system) {
+        super(canvas, uiLayer, system);
 
-        this.settings = arcade.settings;
+        this.settings = system.settings;
         this.input = new InputManager(this.canvas);
         this.sound = new SoundManager();
         this.levelManager = new LevelManager(this);
@@ -21,24 +18,41 @@ export class Game {
         this.lastTime = 0;
 
         // Resize handling
-        window.addEventListener("resize", () => this.resize());
+        this.resizeHandler = () => this.resize();
+        window.addEventListener("resize", this.resizeHandler);
         this.resize();
 
         // Bind input
         this.input.on("shoot", (coords) => this.handleShoot(coords));
 
         // Bind ESC key for pause
-        window.addEventListener("keydown", (e) => {
+        this.keydownHandler = (e) => {
             if (e.key === "Escape" && (this.state === "PLAYING" || this.state === "PAUSED")) {
                 this.togglePause();
             }
-        });
+        };
+        window.addEventListener("keydown", this.keydownHandler);
+    }
 
-        // Start loop
-        this.loop = this.loop.bind(this);
-        requestAnimationFrame(this.loop);
+    static getManifest() {
+        return {
+            id: 'point-gun',
+            name: 'Point Gun',
+            description: 'Fast-paced target shooting',
+            isAvailable: true
+        };
+    }
 
+    async init() {
         this.showMenu();
+    }
+
+    destroy() {
+        window.removeEventListener("resize", this.resizeHandler);
+        window.removeEventListener("keydown", this.keydownHandler);
+        if (this.input && this.input.destroy) {
+            this.input.destroy();
+        }
     }
 
     togglePause() {
@@ -75,7 +89,7 @@ export class Game {
             this.showMenu();
         };
         document.getElementById("btn-arcade-quit").onclick = () => {
-            this.arcade.returnToArcade();
+            this.system.returnToArcade();
         };
     }
 
@@ -104,24 +118,14 @@ export class Game {
         }
     }
 
-    draw() {
+    draw(ctx) {
         // Clear background
-        this.ctx.fillStyle = "#222";
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillStyle = "#222";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         if (this.state === "PLAYING") {
-            this.levelManager.draw(this.ctx);
+            this.levelManager.draw(ctx);
         }
-    }
-
-    loop(timestamp) {
-        const dt = (timestamp - this.lastTime) / 1000;
-        this.lastTime = timestamp;
-
-        this.update(dt);
-        this.draw();
-
-        requestAnimationFrame(this.loop);
     }
 
     showMenu() {
@@ -149,7 +153,7 @@ export class Game {
         document.getElementById("btn-highscores").onclick = () => this.showHighScores();
         document.getElementById("btn-settings").onclick = () => this.showSettings();
         document.getElementById("btn-debug").onclick = () => this.showPracticeMenu();
-        document.getElementById("btn-exit-arcade").onclick = () => this.arcade.returnToArcade();
+        document.getElementById("btn-exit-arcade").onclick = () => this.system.returnToArcade();
     }
 
     startGame(difficulty) {
@@ -296,7 +300,7 @@ export class Game {
         const submitScore = () => {
             const name = nameInput.value.trim() || "PLAYER";
             this.highScores.addScore(name, finalScore, this.levelManager.difficulty);
-            this.arcade.globalHighScores.addScore('point-gun', name, finalScore, this.levelManager.difficulty);
+            this.system.globalHighScores.addScore('point-gun', name, finalScore, this.levelManager.difficulty);
             // After submitting, check if it was game clear or game over
             if (this.levelManager.lives > 0) {
                 this.showGameClearScreen(finalScore);

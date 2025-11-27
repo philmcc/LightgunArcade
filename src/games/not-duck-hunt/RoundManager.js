@@ -40,6 +40,9 @@ export class RoundManager {
             'medium': 7,
             'hard': 8
         };
+
+        // Target history for progress display
+        this.targetHistory = []; // Array of 'hit', 'miss', or 'pending'
     }
 
     setDifficulty(diff) {
@@ -48,6 +51,34 @@ export class RoundManager {
 
     setGameMode(mode) {
         this.gameMode = mode;
+    }
+
+    startGame(mode) {
+        // Initialize game state
+        this.gameMode = mode;
+        this.currentRound = 0;
+        this.score = 0;
+        this.lives = 3;
+
+        // Reset round state
+        this.currentTargetIndex = 0;
+        this.targetsHit = 0;
+        this.targetsMissed = 0;
+        this.activeTargets = [];
+        this.shotsRemaining = 3;
+        this.waitingForNewTarget = false;
+        this.isBonusRound = false;
+        this.targetHistory = [];
+
+        // Set difficulty based on mode (could be customized later)
+        this.difficulty = 'beginner';
+
+        // Update background for round 1
+        this.game.backgroundManager.setForRound(1);
+
+        // Start first round
+        this.game.state = "PLAYING";
+        this.startNewRound();
     }
 
     startNewRound() {
@@ -66,6 +97,7 @@ export class RoundManager {
         this.activeTargets = [];
         this.shotsRemaining = 3;
         this.waitingForNewTarget = false;
+        this.targetHistory = [];
 
         // Show round intro, then spawn first target
         this.game.showRoundIntro(this.currentRound, () => {
@@ -139,6 +171,11 @@ export class RoundManager {
         this.currentTargetIndex += numTargets;
         this.shotsRemaining = 3;
         this.waitingForNewTarget = false;
+
+        // Add pending entries to history for new targets
+        for (let i = 0; i < numTargets; i++) {
+            this.targetHistory.push('pending');
+        }
 
         for (let i = 0; i < numTargets; i++) {
             // Determine target type
@@ -245,6 +282,17 @@ export class RoundManager {
                 // If target escaped without being hit (and not in bonus round)
                 if (target.isEscaped && !target.isHit && !this.isBonusRound) {
                     this.targetsMissed++;
+                    // Mark the oldest pending target as missed
+                    const pendingIndex = this.targetHistory.indexOf('pending');
+                    if (pendingIndex !== -1) {
+                        this.targetHistory[pendingIndex] = 'miss';
+                    }
+                } else if (target.isHit && !this.isBonusRound) {
+                    // Mark the oldest pending target as hit
+                    const pendingIndex = this.targetHistory.indexOf('pending');
+                    if (pendingIndex !== -1) {
+                        this.targetHistory[pendingIndex] = 'hit';
+                    }
                 }
             }
         }
@@ -273,6 +321,55 @@ export class RoundManager {
         this.activeTargets.forEach(target => {
             target.draw(ctx);
         });
+
+        // Draw target progress bar at bottom of screen
+        if (!this.isBonusRound && this.targetHistory.length > 0) {
+            this.drawTargetProgress(ctx);
+        }
+    }
+
+    drawTargetProgress(ctx) {
+        const canvasWidth = this.game.canvas.width;
+        const canvasHeight = this.game.canvas.height;
+
+        // Position at bottom center
+        const barWidth = 400;
+        const barHeight = 40;
+        const x = (canvasWidth - barWidth) / 2;
+        const y = canvasHeight - 60;
+
+        // Draw background
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.fillRect(x - 10, y - 10, barWidth + 20, barHeight + 20);
+
+        // Draw target slots
+        const slotWidth = barWidth / this.targetsPerRound;
+
+        for (let i = 0; i < this.targetsPerRound; i++) {
+            const slotX = x + (i * slotWidth);
+            const status = this.targetHistory[i] || 'empty';
+
+            // Determine color based on status
+            let fillColor;
+            if (status === 'hit') {
+                fillColor = '#00ff00'; // Green for hit
+            } else if (status === 'miss') {
+                fillColor = '#ff0000'; // Red for miss
+            } else if (status === 'pending') {
+                fillColor = '#ffff00'; // Yellow for current target
+            } else {
+                fillColor = '#444444'; // Gray for not yet attempted
+            }
+
+            // Draw slot
+            ctx.fillStyle = fillColor;
+            ctx.fillRect(slotX + 2, y + 2, slotWidth - 4, barHeight - 4);
+
+            // Draw border
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(slotX + 2, y + 2, slotWidth - 4, barHeight - 4);
+        }
     }
 
     endRound() {
