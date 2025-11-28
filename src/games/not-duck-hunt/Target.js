@@ -83,15 +83,15 @@ export class Target {
         img.src = imagePath;
     }
 
-    spawn(difficulty, roundNumber) {
+    spawn(difficulty, roundNumber, speedScale = 1.0) {
         // Safety margin to spawn fully off-screen
         const margin = this.size;
 
         // Determine spawn side (0=left, 1=right)
         const side = Math.random() < 0.5 ? 0 : 1;
 
-        // Base speed increases slightly with round number
-        const baseSpeed = 100 + (roundNumber * 10);
+        // Base speed increases slightly with round number, modified by speedScale
+        const baseSpeed = (100 + (roundNumber * 10)) * speedScale;
         const speed = baseSpeed * this.speedMultiplier;
 
         // Spawn position and velocity
@@ -224,6 +224,12 @@ export class Target {
             if (this.isBonus) {
                 ctx.shadowColor = '#ffd700';
                 ctx.shadowBlur = 20;
+            }
+            
+            // Add player color glow for duel mode
+            if (this.playerColor && this.assignedPlayer !== undefined) {
+                ctx.shadowColor = this.playerColor;
+                ctx.shadowBlur = 15;
             }
 
             // Draw the sprite frame
