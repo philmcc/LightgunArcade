@@ -1,6 +1,6 @@
 # Lightgun Arcade SDK Reference
 
-**Version**: 1.0  
+**Version**: 1.1  
 **Last Updated**: 2025-11-28  
 **Status**: Implementation Guide
 
@@ -99,6 +99,29 @@ When your game extends `BaseGame`, you have access to:
 | `this.ui` | Object | UI component builders (see below) |
 | `this.assets` | AssetLoader | Load images, audio, JSON |
 | `this.players` | PlayerManager | Multiplayer player management |
+
+### Single Player Gun Management
+
+When multiple guns are connected, you can lock input to a specific gun for single-player modes:
+
+```javascript
+// Lock to the gun that started the game
+const activeGun = this.getLastTriggerGunIndex();
+this.setSinglePlayerGun(activeGun >= 0 ? activeGun : -1);
+
+// Check if gun input should be processed
+if (!this.isGunInputAllowed(gunIndex)) {
+    return; // Wrong gun, ignore
+}
+
+// Get active gun index
+const activeGun = this.getActiveGunIndex(); // null = all guns, number = specific gun
+
+// Reset to allow all guns (for multiplayer or menu)
+this.setSinglePlayerGun(null);
+```
+
+The SDK automatically hides inactive gun cursors during gameplay and shows all cursors in menus.
 
 ### UI Components (`this.ui`)
 
@@ -266,9 +289,16 @@ The settings screen handles:
 ### Showing Player Select Screen
 
 ```javascript
-showPlayerSelectMenu() {
+showPlayerSelectMenu(multiplayerMode = 'coop') {
     this.showPlayerSelect({
+        minPlayers: 2,      // Force minimum 2 players for 2-player modes
+        defaultPlayers: 2,  // Default selection
         onStart: (playerCount, mode, gunAssignments) => {
+            this.players.initSession(playerCount, { 
+                mode: multiplayerMode === 'coop' ? 'coop' : 'versus',
+                simultaneous: true,
+                gunAssignments 
+            });
             this.players.resetGame(3);  // 3 lives each
             this.startGame();
         },
@@ -293,6 +323,11 @@ if (this.isMultiplayer()) {
 
 ```javascript
 handleShoot({ x, y, gunIndex }) {
+    // In single player, filter by active gun
+    if (!this.isGunInputAllowed(gunIndex)) {
+        return; // Wrong gun for single player
+    }
+    
     // gunIndex is -1 for mouse, 0-3 for guns
     const playerIndex = this.getPlayerIndexFromGun(gunIndex);
     
@@ -556,6 +591,7 @@ const state = this.stateMachine.getState();
 this.sound.playShoot();
 this.sound.playHit();
 this.sound.playMiss();
+this.sound.playCombo();     // For combo achievements
 this.sound.playGameOver();
 this.sound.playGameClear();
 this.sound.playDogLaugh();  // For Not Duck Hunt
@@ -571,7 +607,78 @@ this.sound.play('customSound');
 1. **Always use SDK UI components** instead of raw HTML manipulation
 2. **Use `this.setInGame(true/false)`** to control cursor visibility
 3. **Route input through `getPlayerIndexFromGun()`** for multiplayer support
-4. **Clear `uiLayer.innerHTML`** before rebuilding UI after settings
-5. **Implement `onKeyDown` and `onStartButton`** for pause functionality
-6. **Use the manifest** to declare multiplayer support
-7. **Call `this.players.resetGame()`** when starting a new game
+4. **Use `isGunInputAllowed()`** to filter input in single-player with multiple guns
+5. **Clear `uiLayer.innerHTML`** before rebuilding UI after settings
+6. **Implement `onKeyDown` and `onStartButton`** for pause functionality
+7. **Use the manifest** to declare multiplayer support
+8. **Call `this.players.resetGame()`** when starting a new game
+9. **Call `setSinglePlayerGun(null)`** when returning to menu to reset gun lock
+10. **Re-apply cursor hiding** after `setInGame(true)` in single-player mode
+
+---
+
+## Single Player Gun Management (New in 1.1)
+
+When multiple lightguns are connected, single-player games should only respond to one gun:
+
+### Starting a Single Player Game
+
+```javascript
+startGame(mode) {
+    this.setInGame(true);
+    
+    // Lock to the gun that clicked the start button
+    const activeGun = this.getLastTriggerGunIndex();
+    this.setSinglePlayerGun(activeGun >= 0 ? activeGun : -1);
+    
+    // ... start game logic
+}
+```
+
+### Filtering Input
+
+```javascript
+handleShoot({ x, y, gunIndex }) {
+    if (!this.isGunInputAllowed(gunIndex)) {
+        return; // Ignore input from inactive gun
+    }
+    // Process shot...
+}
+```
+
+### Returning to Menu
+
+```javascript
+showMenu() {
+    this.setInGame(false);
+    this.setSinglePlayerGun(null); // Allow all guns in menu
+    // ... show menu
+}
+```
+
+### Re-applying After setInGame
+
+When resuming from pause or starting a new round, re-apply cursor hiding:
+
+```javascript
+onRoundStart() {
+    this.setInGame(true);
+    
+    // Re-apply single player cursor hiding
+    const activeGun = this.getActiveGunIndex();
+    if (!this.isMultiplayer() && activeGun !== null) {
+        this._updateSinglePlayerCursors(activeGun);
+    }
+}
+```
+
+### Available Methods
+
+| Method | Description |
+|--------|-------------|
+| `setSinglePlayerGun(gunIndex)` | Lock to specific gun (-1=mouse, null=all) |
+| `getActiveGunIndex()` | Get current active gun (null if all allowed) |
+| `isGunInputAllowed(gunIndex)` | Check if gun input should be processed |
+| `getLastTriggerGunIndex()` | Get last gun that fired (for game start) |
+| `_updateSinglePlayerCursors(gunIndex)` | Hide inactive cursors (internal) |
+| `_resetCursorVisibility()` | Show all cursors (internal) |

@@ -1,8 +1,8 @@
 # Lightgun Arcade - System Overview
 ## Complete Feature & Capability Specification
 
-**Version**: 1.0  
-**Date**: 2025-11-27  
+**Version**: 1.1  
+**Date**: 2025-11-28  
 **Status**: Specification Document  
 
 ---
@@ -46,6 +46,20 @@
 - Per-player coordinate transformation
 - Automatic reload action detection
 - Button press event routing
+
+**Single-Player Gun Management** (New in v1.1):
+- When multiple guns are connected, single-player games lock to one gun
+- The gun that clicks "Start" becomes the active gun
+- Inactive gun cursors are hidden during gameplay
+- All gun cursors visible in menus for navigation
+- SDK provides `setSinglePlayerGun()`, `isGunInputAllowed()`, `getActiveGunIndex()`
+
+**Cursor Management**:
+- Per-gun virtual cursors with player colors
+- Cursors always visible in menus
+- Configurable visibility during gameplay
+- Forced hiding for inactive guns in single-player
+- Automatic visibility reset when returning to menu
 
 ---
 
@@ -182,28 +196,46 @@
 - Each player assigned to their own gun
 - Guest players (no account required)
 - Registered players (stats tracked)
-- Player selection screen before game starts
+- Player selection screen with `minPlayers`/`defaultPlayers` options
 
-**Multiplayer Modes** (All Games Required to Support):
-- **Simultaneous Play**: All players shoot at the same time
-  - Co-op: Team objectives, shared/combined scoring
-  - Versus: Competitive, individual scoring
-- **Turn-Based**: Players take turns
-  - Hot-seat style
-  - Round-robin turns
+**Implemented Multiplayer Modes** (Not Duck Hunt):
+- **Co-op Mode**: 
+  - Shared team score displayed prominently
+  - Shared lives pool
+  - Work together to clear rounds
+  - Green theme color
+  - Instructions: "Work together! Shared lives, team score."
+- **Versus Mode**: 
+  - Individual scores per player
+  - Race to hit targets first
+  - "FIRST!" indicator on hits
+  - Player-colored floating scores (P1 +100, P2 +100)
+  - Red theme color
+  - Instructions: "Race to hit targets! First hit gets the points!"
+- **Duel Mode**: 
+  - Targets assigned to specific players (alternating)
+  - Player-colored target indicators
+  - Only shoot YOUR targets
+  - Blue theme color
+  - Instructions: "Shoot YOUR colored targets only!"
 
 **Multiplayer UX**:
-- Color coding per player (P1=blue, P2=red, etc.)
-- Screen zones/sections per player
-- Individual HUD elements (score, ammo, etc.)
-- Name tags or icons for identification
-- Turn indicators (for turn-based)
-- Team status (for co-op)
+- Color coding per player (P1=Red, P2=Blue)
+- Per-player ammo tracking and display
+- Individual HUD elements (score, ammo, lives)
+- Mode-specific instructions at round start
+- Team score display for Co-op mode
 - Post-game results:
   - Individual player scores
   - Winner announcement
   - Statistics breakdown per player
   - Rematch option
+
+**Player Selection Screen**:
+- Configurable minimum players (`minPlayers` option)
+- Configurable default selection (`defaultPlayers` option)
+- Gun assignment display
+- Mode selection (if multiple modes supported)
 
 ---
 
