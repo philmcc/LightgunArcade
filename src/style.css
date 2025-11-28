@@ -726,3 +726,127 @@ input[type="color"] {
 .danger:hover {
   background: #ff0000;
 }
+
+/* Primary button style */
+button.primary {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+button.primary:hover {
+  background: #ff3377;
+}
+
+/* Gun Setup - Additional styles for WebHID */
+.setup-instructions .warning {
+  color: #ffaa00;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.setup-instructions .hint {
+  font-size: 0.9rem;
+  opacity: 0.7;
+  margin-top: 0.5rem;
+}
+
+.gun-actions button {
+  margin-bottom: 0.5rem;
+}
+
+.gun-actions button:last-child {
+  margin-bottom: 0;
+}
+
+.btn-unassign {
+  background: #666;
+  font-size: 0.9rem !important;
+}
+
+.btn-unassign:hover {
+  background: #888;
+}
+
+/* Available devices list */
+.available-devices {
+  background: rgba(0, 204, 255, 0.1);
+  border: 1px solid var(--secondary-color);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 2rem;
+}
+
+.available-devices h3 {
+  margin: 0 0 1rem 0;
+  color: var(--secondary-color);
+  font-size: 1.1rem;
+}
+
+.available-devices ul {
+  list-style: none;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.device-item {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 0.3rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.device-item .device-name {
+  font-weight: bold;
+}
+
+.device-item .device-type {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+
+/* Device selector overlay */
+.device-selector {
+  min-width: 400px;
+}
+
+.device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+.device-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid var(--secondary-color);
+  color: #fff;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.device-option:hover {
+  background: var(--secondary-color);
+  color: #000;
+}
+
+.device-option .device-name {
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.device-option .device-type {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  text-transform: uppercase;
+}

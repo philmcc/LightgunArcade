@@ -29,6 +29,18 @@ export class ArcadeSystem {
 
     async init() {
         await this.gunManager.init();
+        
+        // Link settings with gunManager for cursor control
+        this.settings.gunManager = this.gunManager;
+        
+        // Set the target canvas for gun coordinate mapping
+        this.gunManager.setTargetCanvas(this.canvas);
+        
+        // Apply the in-game cursor visibility setting
+        this.gunManager.setShowCursorsInGame(this.settings.showGunCursors);
+        
+        // Start in menu mode (not in game)
+        this.gunManager.setInGame(false);
     }
 
     resize() {
@@ -47,6 +59,9 @@ export class ArcadeSystem {
     showArcadeMenu() {
         this.state = 'ARCADE_MENU';
         this.currentGame = null;
+        
+        // Not in game - cursors always visible
+        this.gunManager.setInGame(false);
         const games = this.registry.getAllGames();
         const user = this.auth.getCurrentUser();
 
@@ -105,6 +120,10 @@ export class ArcadeSystem {
 
         try {
             this.state = 'PLAYING_GAME';
+            
+            // In game - cursor visibility controlled by setting
+            this.gunManager.setInGame(true);
+            
             // Instantiate the game class
             this.currentGame = new gameRegistration.GameClass(this.canvas, this.uiLayer, this);
 
@@ -123,6 +142,9 @@ export class ArcadeSystem {
             this.currentGame.destroy(); // Clean up
             this.currentGame = null;
         }
+        
+        // Leaving game - cursors always visible in menus
+        this.gunManager.setInGame(false);
         this.showArcadeMenu();
     }
 
@@ -247,6 +269,11 @@ export class ArcadeSystem {
                     <input type="checkbox" id="fullscreen-check" ${this.settings.isFullscreen ? 'checked' : ''}>
                 </div>
                 
+                <div class="setting-row">
+                    <label>Show Cursors In-Game:</label>
+                    <input type="checkbox" id="gun-cursors-check" ${this.settings.showGunCursors ? 'checked' : ''}>
+                </div>
+                
                 <button id="btn-back-arcade">BACK</button>
             </div>
         `;
@@ -257,6 +284,7 @@ export class ArcadeSystem {
         const sindenThick = document.getElementById("sinden-thick");
         const sindenColor = document.getElementById("sinden-color");
         const fullscreenCheck = document.getElementById("fullscreen-check");
+        const gunCursorsCheck = document.getElementById("gun-cursors-check");
 
         inputSelect.value = this.settings.inputMethod;
 
@@ -273,6 +301,7 @@ export class ArcadeSystem {
         sindenThick.oninput = (e) => this.settings.setSindenThickness(e.target.value);
         sindenColor.oninput = (e) => this.settings.setSindenColor(e.target.value);
         fullscreenCheck.onchange = () => this.settings.toggleFullscreen();
+        gunCursorsCheck.onchange = (e) => this.settings.setShowGunCursors(e.target.checked);
 
         document.getElementById("btn-back-arcade").onclick = () => this.showArcadeMenu();
     }

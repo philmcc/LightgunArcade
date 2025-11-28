@@ -9,7 +9,8 @@ export class Game extends BaseGame {
         super(canvas, uiLayer, system);
 
         this.settings = system.settings;
-        this.input = new InputManager(this.canvas);
+        // Pass gunManager to InputManager for WebHID lightgun support
+        this.input = new InputManager(this.canvas, system.gunManager);
         this.sound = new SoundManager();
         this.levelManager = new LevelManager(this);
         this.highScores = new HighScoreManager();
@@ -58,9 +59,13 @@ export class Game extends BaseGame {
     togglePause() {
         if (this.state === "PLAYING") {
             this.state = "PAUSED";
+            // Show cursors for pause menu
+            this.system.gunManager.setInGame(false);
             this.showPauseMenu();
         } else if (this.state === "PAUSED") {
             this.state = "PLAYING";
+            // Hide cursors for gameplay (respects user setting)
+            this.system.gunManager.setInGame(true);
             this.hidePauseMenu();
         }
     }
@@ -130,6 +135,8 @@ export class Game extends BaseGame {
 
     showMenu() {
         this.state = "MENU";
+        // Show cursors for menu
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>POINT BLANK WEB</h1>
@@ -157,6 +164,8 @@ export class Game extends BaseGame {
     }
 
     startGame(difficulty) {
+        // Hide cursors for gameplay (respects user setting)
+        this.system.gunManager.setInGame(true);
         this.levelManager.isPracticeMode = false;
         this.levelManager.setDifficulty(difficulty);
         this.levelManager.startNextStage();
@@ -192,6 +201,8 @@ export class Game extends BaseGame {
     showStageResult(success, callback) {
         try {
             this.state = "RESULT";
+            // Show cursors for stage result screen
+            this.system.gunManager.setInGame(false);
             const msg = success ? "STAGE CLEAR!" : "LIFE LOST!";
             const color = success ? "#00ccff" : "#ff0055";
 
@@ -281,6 +292,8 @@ export class Game extends BaseGame {
     }
 
     showNameEntry(finalScore) {
+        // Show cursors for name entry screen
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>NEW HIGH SCORE!</h1>
@@ -316,6 +329,8 @@ export class Game extends BaseGame {
     }
 
     showGameClearScreen(finalScore) {
+        // Show cursors for game clear screen
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>CONGRATULATIONS!</h1>
@@ -342,6 +357,8 @@ export class Game extends BaseGame {
     }
 
     showGameOverScreen(finalScore) {
+        // Show cursors for game over screen
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>GAME OVER</h1>
@@ -432,6 +449,8 @@ export class Game extends BaseGame {
     }
 
     showHighScores() {
+        // Show cursors for high scores screen
+        this.system.gunManager.setInGame(false);
         const scores = this.highScores.getScores();
 
         let scoresHTML = '';
@@ -465,6 +484,8 @@ export class Game extends BaseGame {
     }
 
     showPracticeMenu() {
+        // Show cursors for practice menu
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
             <div class="screen">
                 <h1>PRACTICE MODE</h1>

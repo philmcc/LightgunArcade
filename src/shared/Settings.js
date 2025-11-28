@@ -4,7 +4,11 @@ export class Settings {
         this.sindenColor = "#ffffff";
         this.sindenThickness = 10; // pixels
         this.inputMethod = "mouse"; // 'mouse', 'sinden', 'gun4ir'
-        this.isFullscreen = false; // Added isFullscreen property
+        this.isFullscreen = false;
+        this.showGunCursors = true; // Show virtual cursors for WebHID guns
+        
+        // Reference to gunManager (set by ArcadeSystem)
+        this.gunManager = null;
 
         this.borderElement = document.getElementById("sinden-border");
 
@@ -16,11 +20,12 @@ export class Settings {
         const saved = localStorage.getItem("pbs_settings");
         if (saved) {
             const data = JSON.parse(saved);
-            this.sindenEnabled = data.sindenEnabled || false; // Added default
-            this.sindenColor = data.sindenColor || '#ffffff'; // Added default
-            this.sindenThickness = data.sindenThickness || 10; // Added default
-            this.inputMethod = data.inputMethod || 'mouse'; // Added default
-            this.isFullscreen = data.isFullscreen || false; // Load isFullscreen
+            this.sindenEnabled = data.sindenEnabled || false;
+            this.sindenColor = data.sindenColor || '#ffffff';
+            this.sindenThickness = data.sindenThickness || 10;
+            this.inputMethod = data.inputMethod || 'mouse';
+            this.isFullscreen = data.isFullscreen || false;
+            this.showGunCursors = data.showGunCursors !== false; // Default true
         }
     }
 
@@ -30,7 +35,8 @@ export class Settings {
             sindenColor: this.sindenColor,
             sindenThickness: this.sindenThickness,
             inputMethod: this.inputMethod,
-            isFullscreen: this.isFullscreen, // Save isFullscreen
+            isFullscreen: this.isFullscreen,
+            showGunCursors: this.showGunCursors,
         };
         localStorage.setItem("pbs_settings", JSON.stringify(data));
     }
@@ -112,6 +118,16 @@ export class Settings {
             }
         }
 
+        this.save();
+    }
+
+    setShowGunCursors(enabled) {
+        this.showGunCursors = enabled;
+        if (this.gunManager) {
+            // This setting only affects in-game cursor visibility
+            // Cursors always show in menus
+            this.gunManager.setShowCursorsInGame(enabled);
+        }
         this.save();
     }
 }

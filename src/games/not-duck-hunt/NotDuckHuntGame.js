@@ -10,7 +10,8 @@ export class Game extends BaseGame {
         super(canvas, uiLayer, system);
 
         this.settings = system.settings;
-        this.input = new InputManager(this.canvas);
+        // Pass gunManager to InputManager for WebHID lightgun support
+        this.input = new InputManager(this.canvas, system.gunManager);
         this.sound = new SoundManager();
         this.roundManager = new RoundManager(this);
         this.highScores = new HighScoreManager();
@@ -68,9 +69,13 @@ export class Game extends BaseGame {
     togglePause() {
         if (this.state === "PLAYING") {
             this.state = "PAUSED";
+            // Show cursors for pause menu
+            this.system.gunManager.setInGame(false);
             this.showPauseMenu();
         } else if (this.state === "PAUSED") {
             this.state = "PLAYING";
+            // Hide cursors for gameplay (respects user setting)
+            this.system.gunManager.setInGame(true);
             this.hidePauseMenu();
         }
     }
@@ -173,6 +178,8 @@ export class Game extends BaseGame {
 
     showMenu() {
         this.state = "MENU";
+        // Show cursors for menu
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>NOT DUCK HUNT</h1>
@@ -196,6 +203,8 @@ export class Game extends BaseGame {
     }
 
     startGame(mode) {
+        // Hide cursors for gameplay (respects user setting)
+        this.system.gunManager.setInGame(true);
         this.roundManager.startGame(mode);
     }
 
@@ -229,6 +238,8 @@ export class Game extends BaseGame {
     }
 
     showHighScores() {
+        // Show cursors for high scores screen
+        this.system.gunManager.setInGame(false);
         const scores = this.highScores.getScores();
 
         let scoresHTML = '';
@@ -278,6 +289,8 @@ export class Game extends BaseGame {
         setTimeout(() => {
             this.uiLayer.innerHTML = ''; // Clear intro
             this.state = "PLAYING"; // Set state to playing
+            // Hide cursors for gameplay (respects user setting)
+            this.system.gunManager.setInGame(true);
             this.showHUD();
             callback();
         }, 2000);
@@ -295,12 +308,16 @@ export class Game extends BaseGame {
         setTimeout(() => {
             this.uiLayer.innerHTML = '';
             this.state = "PLAYING"; // Set state to playing
+            // Hide cursors for gameplay (respects user setting)
+            this.system.gunManager.setInGame(true);
             this.showHUD();
             callback();
         }, 2000);
     }
 
     showRoundResult(success, hits, total, callback) {
+        // Show cursors for round result screen
+        this.system.gunManager.setInGame(false);
         this.state = "ROUND_RESULT";
         const msg = success ? "ROUND CLEAR" : "FAILED";
         const color = success ? "#00ccff" : "#ff0055";
@@ -324,6 +341,8 @@ export class Game extends BaseGame {
     }
 
     showBonusRoundResult(hits, callback) {
+        // Show cursors for bonus result screen
+        this.system.gunManager.setInGame(false);
         this.state = "ROUND_RESULT";
         const bonus = hits * 100;
         this.roundManager.score += bonus;
@@ -436,6 +455,8 @@ export class Game extends BaseGame {
     }
 
     showNameEntry(finalScore, cleared) {
+        // Show cursors for name entry screen
+        this.system.gunManager.setInGame(false);
         this.uiLayer.innerHTML = `
             <div class="screen">
                 <h1>NEW HIGH SCORE!</h1>
@@ -469,6 +490,8 @@ export class Game extends BaseGame {
     }
 
     showGameOverScreen(finalScore, cleared) {
+        // Show cursors for game over screen
+        this.system.gunManager.setInGame(false);
         const title = cleared ? "ALL ROUNDS CLEARED!" : "GAME OVER";
         this.uiLayer.innerHTML = `
             <div class="screen">

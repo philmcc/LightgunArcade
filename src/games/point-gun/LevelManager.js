@@ -48,6 +48,8 @@ export class LevelManager {
         this.game.showStageIntro(this.currentStage, this.currentGame.objective, () => {
             this.currentGame.start();
             this.game.state = "PLAYING";
+            // Hide cursors for gameplay (respects user setting)
+            this.game.system.gunManager.setInGame(true);
         });
     }
 

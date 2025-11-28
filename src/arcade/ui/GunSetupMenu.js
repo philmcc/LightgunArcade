@@ -1,6 +1,10 @@
 /**
  * GunSetupMenu class
  * UI for configuring lightguns
+ * 
+ * Supports two detection modes:
+ * 1. WebHID mode: For Gun4IR/Sinden - can distinguish multiple devices
+ * 2. Pointer mode: Fallback for single mouse/touchscreen
  */
 export class GunSetupMenu {
     constructor(arcadeManager) {
@@ -8,6 +12,7 @@ export class GunSetupMenu {
         this.gunManager = arcadeManager.gunManager;
         this.container = null;
         this.mappingCancel = null;
+        this.availableHIDDevices = [];
     }
 
     /**
@@ -22,10 +27,27 @@ export class GunSetupMenu {
      * Generate HTML for the menu
      */
     render() {
+        const webHIDSupported = this.gunManager.shouldUseWebHID();
+        
         const gunsHtml = this.gunManager.guns.map(gun => {
-            const isConnected = gun.config.pointerId !== null;
+            const isConnected = gun.config.pointerId !== null || gun.config.hidDeviceId !== null;
+            const isCalibrated = this.gunManager.isGunCalibrated(gun.index);
             const statusClass = isConnected ? 'connected' : 'disconnected';
-            const statusText = isConnected ? 'CONNECTED' : 'NOT ASSIGNED';
+            let statusText = isConnected ? 'CONNECTED' : 'NOT ASSIGNED';
+            if (isConnected && gun.config.hidDeviceId) {
+                statusText = isCalibrated ? 'CALIBRATED' : 'NEEDS CALIBRATION';
+            }
+            
+            // Determine device display info
+            let deviceId = '-';
+            let deviceType = gun.config.deviceType;
+            if (gun.config.hidDeviceId) {
+                deviceId = gun.config.deviceName || gun.config.hidDeviceId.substring(0, 12) + '...';
+                deviceType = gun.config.deviceType || 'gun4ir';
+            } else if (gun.config.pointerId !== null) {
+                deviceId = `Pointer ${gun.config.pointerId}`;
+                deviceType = 'mouse';
+            }
 
             return `
         <div class="gun-slot ${statusClass}" data-index="${gun.index}">
@@ -36,11 +58,11 @@ export class GunSetupMenu {
           <div class="gun-details">
             <div class="detail-row">
               <label>Type:</label>
-              <span>${gun.config.deviceType}</span>
+              <span>${deviceType}</span>
             </div>
             <div class="detail-row">
-              <label>ID:</label>
-              <span>${gun.config.pointerId !== null ? gun.config.pointerId : '-'}</span>
+              <label>Device:</label>
+              <span title="${gun.config.hidDeviceId || gun.config.pointerId || ''}">${deviceId}</span>
             </div>
             <div class="detail-row">
               <label>Trigger:</label>
@@ -54,29 +76,57 @@ export class GunSetupMenu {
           <div class="gun-actions">
             ${isConnected ?
                     `<button class="btn-calibrate" data-index="${gun.index}">CALIBRATE</button>
-                     <button class="btn-map" data-index="${gun.index}">MAP BUTTONS</button>` :
-                    `<button class="btn-assign" data-index="${gun.index}" disabled>WAITING...</button>`
+                     <button class="btn-map" data-index="${gun.index}">MAP BUTTONS</button>
+                     <button class="btn-unassign" data-index="${gun.index}">UNASSIGN</button>` :
+                    `<button class="btn-assign-manual" data-index="${gun.index}">ASSIGN DEVICE</button>`
                 }
           </div>
         </div>
       `;
         }).join('');
 
+        // Build available devices list for WebHID
+        const availableDevicesHtml = this.availableHIDDevices.length > 0 ? `
+            <div class="available-devices">
+                <h3>Available Devices</h3>
+                <ul>
+                    ${this.availableHIDDevices.map(device => `
+                        <li class="device-item" data-device-id="${device.id}">
+                            <span class="device-name">${device.productName || device.type}</span>
+                            <span class="device-type">${device.type}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        ` : '';
+
         this.arcade.uiLayer.innerHTML = `
       <div class="screen gun-setup-screen">
         <h1>GUN CONFIGURATION</h1>
         
         <div class="setup-instructions">
-          <p>Click "DETECT GUNS" and then pull the trigger on each gun to assign it.</p>
+          ${webHIDSupported ? `
+            <p><strong>WebHID Supported!</strong> Click "ADD LIGHTGUNS" to select your Gun4IR devices.</p>
+            <p>Each gun will be detected as a separate device.</p>
+          ` : `
+            <p>Click "DETECT GUNS" and then pull the trigger on each gun to assign it.</p>
+            <p class="warning">⚠️ Note: On Windows, multiple mice/guns may share the same pointer. 
+               For multi-gun support, use Chrome/Edge with Gun4IR devices.</p>
+          `}
         </div>
+
+        ${availableDevicesHtml}
 
         <div class="gun-grid">
           ${gunsHtml}
         </div>
 
         <div class="setup-controls">
+          ${webHIDSupported ? `
+            <button id="btn-add-hid-devices" class="primary">ADD LIGHTGUNS</button>
+          ` : ''}
           <button id="btn-detect-guns" class="${this.gunManager.isDetecting ? 'active' : ''}">
-            ${this.gunManager.isDetecting ? 'STOP DETECTION' : 'DETECT GUNS'}
+            ${this.gunManager.isDetecting ? 'STOP DETECTION' : 'DETECT (POINTER)'}
           </button>
           <button id="btn-reset-guns" class="danger">RESET ALL</button>
           <button id="btn-back-arcade">BACK</button>
@@ -87,6 +137,7 @@ export class GunSetupMenu {
             <div class="detection-message">
               <h2>LISTENING FOR INPUT...</h2>
               <p>Pull the trigger on a gun to assign it to the next available slot.</p>
+              <p class="hint">Note: If using multiple Gun4IR devices, use "ADD LIGHTGUNS" instead.</p>
               <button id="btn-stop-detection">CANCEL</button>
             </div>
           </div>
@@ -105,7 +156,13 @@ export class GunSetupMenu {
             this.arcade.showArcadeMenu();
         };
 
-        // Detect toggle
+        // WebHID: Add lightguns button
+        const addHIDBtn = document.getElementById('btn-add-hid-devices');
+        if (addHIDBtn) {
+            addHIDBtn.onclick = () => this.addHIDDevices();
+        }
+
+        // Detect toggle (pointer-based fallback)
         const detectBtn = document.getElementById('btn-detect-guns');
         if (detectBtn) {
             detectBtn.onclick = () => this.toggleDetection();
@@ -121,6 +178,7 @@ export class GunSetupMenu {
         document.getElementById('btn-reset-guns').onclick = async () => {
             if (confirm('Are you sure you want to reset all gun assignments?')) {
                 await this.gunManager.resetAssignments();
+                this.availableHIDDevices = [];
                 this.render();
                 this.attachListeners();
             }
@@ -129,8 +187,8 @@ export class GunSetupMenu {
         // Calibration buttons
         document.querySelectorAll('.btn-calibrate').forEach(btn => {
             btn.onclick = (e) => {
-                const index = e.target.dataset.index;
-                alert(`Calibration for Player ${parseInt(index) + 1} coming soon!`);
+                const index = parseInt(e.target.dataset.index);
+                this.startCalibration(index);
             };
         });
 
@@ -141,6 +199,167 @@ export class GunSetupMenu {
                 this.startMapping(index);
             };
         });
+
+        // Unassign buttons
+        document.querySelectorAll('.btn-unassign').forEach(btn => {
+            btn.onclick = async (e) => {
+                const index = parseInt(e.target.dataset.index);
+                await this.unassignGun(index);
+            };
+        });
+
+        // Manual assign buttons (for selecting from available devices)
+        document.querySelectorAll('.btn-assign-manual').forEach(btn => {
+            btn.onclick = (e) => {
+                const index = parseInt(e.target.dataset.index);
+                this.showDeviceSelector(index);
+            };
+        });
+    }
+
+    /**
+     * Add HID devices via browser picker
+     * Must be called from user gesture
+     */
+    async addHIDDevices() {
+        try {
+            const devices = await this.gunManager.requestHIDDevices();
+            
+            if (devices.length === 0) {
+                console.log('No devices selected');
+                return;
+            }
+
+            console.log('Selected devices:', devices);
+            
+            // Update available devices list
+            this.availableHIDDevices = this.gunManager.getAvailableHIDDevices();
+            
+            // Auto-assign devices to available slots
+            for (const device of devices) {
+                const nextSlot = this.gunManager.getNextAvailableSlot();
+                if (nextSlot) {
+                    await this.gunManager.assignHIDDevice(device, nextSlot.index);
+                }
+            }
+
+            // Refresh the UI
+            this.render();
+            this.attachListeners();
+            
+        } catch (error) {
+            console.error('Error adding HID devices:', error);
+            alert('Failed to add devices. Make sure you are using Chrome or Edge browser.');
+        }
+    }
+
+    /**
+     * Unassign a gun from its player slot
+     */
+    async unassignGun(gunIndex) {
+        const gun = this.gunManager.guns[gunIndex];
+        if (!gun) return;
+
+        gun.config.pointerId = null;
+        gun.config.hidDeviceId = null;
+        gun.config.deviceType = 'mouse';
+        gun.config.deviceName = '';
+        gun.state.isConnected = false;
+
+        this.gunManager.activeGunCount = this.gunManager.guns.filter(g => 
+            g.config.hidDeviceId !== null || g.config.pointerId !== null
+        ).length;
+
+        await this.gunManager.saveProfiles();
+        
+        // Update available devices
+        this.availableHIDDevices = this.gunManager.getAvailableHIDDevices();
+        
+        this.render();
+        this.attachListeners();
+    }
+
+    /**
+     * Start calibration for a gun
+     */
+    startCalibration(gunIndex) {
+        const gun = this.gunManager.guns[gunIndex];
+        if (!gun || !gun.config.hidDeviceId) {
+            alert('Please assign a lightgun device first before calibrating.');
+            return;
+        }
+
+        this.gunManager.startCalibration(
+            gunIndex,
+            (result) => {
+                // Calibration complete
+                alert(`Calibration complete for ${gun.name}!\n\nThe cursor should now track accurately.`);
+                this.render();
+                this.attachListeners();
+            },
+            () => {
+                // Calibration cancelled
+                this.render();
+                this.attachListeners();
+            }
+        );
+    }
+
+    /**
+     * Show device selector for manual assignment
+     */
+    showDeviceSelector(gunIndex) {
+        const availableDevices = this.gunManager.getAvailableHIDDevices();
+        
+        if (availableDevices.length === 0) {
+            // No HID devices available, prompt to add or use pointer detection
+            const webHIDSupported = this.gunManager.shouldUseWebHID();
+            if (webHIDSupported) {
+                alert('No unassigned lightguns available.\n\nClick "ADD LIGHTGUNS" to select your Gun4IR devices first.');
+            } else {
+                alert('No devices available.\n\nUse "DETECT (POINTER)" to assign using trigger pull.');
+            }
+            return;
+        }
+
+        // Show device selection overlay
+        const overlay = document.createElement('div');
+        overlay.className = 'detection-overlay';
+        overlay.innerHTML = `
+            <div class="detection-message device-selector">
+                <h2>SELECT DEVICE FOR ${this.gunManager.guns[gunIndex].name}</h2>
+                <div class="device-list">
+                    ${availableDevices.map(device => `
+                        <button class="device-option" data-device-id="${device.id}">
+                            <span class="device-name">${device.productName || 'Unknown Device'}</span>
+                            <span class="device-type">${device.type}</span>
+                        </button>
+                    `).join('')}
+                </div>
+                <button id="btn-cancel-select">CANCEL</button>
+            </div>
+        `;
+        document.querySelector('.gun-setup-screen').appendChild(overlay);
+
+        // Handle device selection
+        overlay.querySelectorAll('.device-option').forEach(btn => {
+            btn.onclick = async () => {
+                const deviceId = btn.dataset.deviceId;
+                const device = availableDevices.find(d => d.id === deviceId);
+                if (device) {
+                    await this.gunManager.assignHIDDevice(device, gunIndex);
+                    this.availableHIDDevices = this.gunManager.getAvailableHIDDevices();
+                }
+                overlay.remove();
+                this.render();
+                this.attachListeners();
+            };
+        });
+
+        // Cancel button
+        document.getElementById('btn-cancel-select').onclick = () => {
+            overlay.remove();
+        };
     }
 
     /**

@@ -11,8 +11,10 @@ export class Gun {
 
         // Configuration
         this.config = {
-            pointerId: null,      // The browser pointerId assigned to this gun
+            pointerId: null,      // The browser pointerId assigned to this gun (legacy/fallback)
+            hidDeviceId: null,    // WebHID device ID for distinguishing multiple guns
             deviceType: 'mouse',  // 'mouse', 'sinden', 'gun4ir', etc.
+            deviceName: '',       // Human-readable device name
             buttons: {
                 trigger: 0,         // Button index for trigger
                 reload: 2,          // Button index for reload (or 'offscreen')
