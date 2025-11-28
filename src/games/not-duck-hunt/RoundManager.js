@@ -456,6 +456,12 @@ export class RoundManager {
             // Calculate enhanced scoring for normal/destroyed targets
             const scoringResult = this.calculateEnhancedScore(hitTarget, hitResult, playerIndex);
             
+            // In versus mode, add "FIRST!" bonus for visual emphasis
+            if (this.multiplayerMode === 'versus' && this.game.isMultiplayer()) {
+                scoringResult.bonuses.push({ type: 'FIRST!', points: 0 });
+                scoringResult.isFirstHit = true;
+            }
+            
             this.score += scoringResult.totalPoints;
             this.targetsHit++;
             this.roundStats.hits++;
@@ -472,6 +478,11 @@ export class RoundManager {
             // Record hit for player in multiplayer
             if (this.game.isMultiplayer()) {
                 this.game.players.recordHit(playerIndex, scoringResult.totalPoints);
+                
+                // In co-op mode, also add to team score
+                if (this.multiplayerMode === 'coop') {
+                    // Team score is tracked in this.score (already done above)
+                }
             }
 
             // Play hit sound
@@ -480,8 +491,8 @@ export class RoundManager {
             // Show hit particle effect with combo indicator
             this.game.spawnHitEffect(hitTarget.x, hitTarget.y, scoringResult);
             
-            // Show floating score text
-            this.game.showFloatingScore(hitTarget.x, hitTarget.y, scoringResult);
+            // Show floating score text with player indicator in versus
+            this.game.showFloatingScore(hitTarget.x, hitTarget.y, scoringResult, playerIndex);
         }
 
         return { hit: anyHit };

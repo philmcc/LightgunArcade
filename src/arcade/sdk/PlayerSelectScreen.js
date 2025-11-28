@@ -33,7 +33,7 @@ export class PlayerSelectScreen {
         this.defaultMode = mp.defaultMode || (this.supportedModes[0]?.id || 'single');
 
         // Current selection state
-        this.selectedPlayerCount = this.minPlayers;
+        this.selectedPlayerCount = mp.defaultPlayers || this.minPlayers;
         this.selectedMode = this.defaultMode;
         this.gunAssignments = []; // Gun index for each player slot
     }

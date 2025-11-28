@@ -325,6 +325,8 @@ export class Game extends BaseGame {
         this.multiplayerMode = multiplayerMode;
         
         this.showPlayerSelect({
+            minPlayers: 2, // Force 2 players since they selected a 2-player mode
+            defaultPlayers: 2,
             onStart: (playerCount, mode, gunAssignments) => {
                 // Set up the multiplayer mode
                 const modeType = multiplayerMode === 'coop' ? 'coop' : 'versus';
@@ -408,11 +410,39 @@ export class Game extends BaseGame {
 
     showRoundIntro(roundNum, callback) {
         this.state = "ROUND_INTRO";
+        
+        // Get mode-specific subtitle and info
+        let subtitle = 'GET READY';
+        let info = `LIVES: ${this.roundManager.lives}`;
+        let borderColor = '#00ccff';
+        
+        // Show mode instructions on round 1
+        if (roundNum === 1 && this.isMultiplayer()) {
+            switch (this.multiplayerMode) {
+                case 'coop':
+                    subtitle = 'CO-OP MODE';
+                    info = 'Work together! Shared lives, team score.';
+                    borderColor = '#22aa22';
+                    break;
+                case 'versus':
+                    subtitle = 'VERSUS MODE';
+                    info = 'Race to hit targets! First hit gets the points!';
+                    borderColor = '#aa2222';
+                    break;
+                case 'duel':
+                    subtitle = 'DUEL MODE';
+                    info = 'Shoot YOUR colored targets only!';
+                    borderColor = '#2222aa';
+                    break;
+            }
+        }
+        
         this.ui.overlay.showIntro({
             title: `ROUND ${roundNum}`,
-            subtitle: 'GET READY',
-            info: `LIVES: ${this.roundManager.lives}`,
-            duration: 2000,
+            subtitle: subtitle,
+            info: info,
+            borderColor: borderColor,
+            duration: roundNum === 1 && this.isMultiplayer() ? 3000 : 2000, // Longer for instructions
             onComplete: () => {
                 this.state = "PLAYING";
                 this.setInGame(true);
@@ -577,11 +607,28 @@ export class Game extends BaseGame {
 
     showHUD() {
         if (this.isMultiplayer()) {
-            // Use multiplayer HUD
-            this.showMultiplayerHUD({
+            // Use multiplayer HUD with mode-specific config
+            const hudConfig = {
                 round: `ROUND ${this.roundManager.currentRound}`,
                 ammo: 3
-            });
+            };
+            
+            // Add mode indicator
+            if (this.multiplayerMode === 'coop') {
+                hudConfig.modeLabel = 'CO-OP';
+                hudConfig.showTeamScore = true;
+            } else if (this.multiplayerMode === 'versus') {
+                hudConfig.modeLabel = 'VERSUS';
+            } else if (this.multiplayerMode === 'duel') {
+                hudConfig.modeLabel = 'DUEL';
+            }
+            
+            this.showMultiplayerHUD(hudConfig);
+            
+            // Add team score display for co-op
+            if (this.multiplayerMode === 'coop') {
+                this.addTeamScoreDisplay();
+            }
         } else {
             // Single player HUD
             this.ui.hud.create({
@@ -590,6 +637,19 @@ export class Game extends BaseGame {
                 round: `ROUND ${this.roundManager.currentRound}`,
                 ammo: 3
             });
+        }
+    }
+    
+    addTeamScoreDisplay() {
+        // Add team score element to HUD for co-op mode
+        const teamScoreEl = document.createElement('div');
+        teamScoreEl.id = 'team-score-display';
+        teamScoreEl.style.cssText = 'position: absolute; top: 50px; left: 50%; transform: translateX(-50%); font-size: 18px; color: #22ff22; font-weight: bold; text-shadow: 2px 2px 0 #000;';
+        teamScoreEl.innerHTML = `TEAM SCORE: <span id="team-score">${this.roundManager.score}</span>`;
+        
+        const hud = document.getElementById('multiplayer-hud');
+        if (hud) {
+            hud.appendChild(teamScoreEl);
         }
     }
 
@@ -616,6 +676,14 @@ export class Game extends BaseGame {
             this.players.players.forEach((player, index) => {
                 this.updatePlayerHUD(index);
             });
+            
+            // Update team score in co-op mode
+            if (this.multiplayerMode === 'coop') {
+                const teamScoreEl = document.getElementById('team-score');
+                if (teamScoreEl) {
+                    teamScoreEl.textContent = this.roundManager.score;
+                }
+            }
         } else {
             this.ui.hud.update('score', this.roundManager.score);
         }
@@ -672,7 +740,7 @@ export class Game extends BaseGame {
         });
     }
 
-    showFloatingScore(x, y, scoringResult) {
+    showFloatingScore(x, y, scoringResult, playerIndex = 0) {
         // Main score text
         let color = '#fff';
         let size = 24;
@@ -680,7 +748,14 @@ export class Game extends BaseGame {
         // Handle negative scores (decoy penalty)
         const isNegative = scoringResult.totalPoints < 0;
         
-        if (isNegative) {
+        // In versus mode, use player color
+        if (this.multiplayerMode === 'versus' && this.isMultiplayer() && !isNegative) {
+            const player = this.players.getPlayer(playerIndex);
+            if (player) {
+                color = player.colors.primary;
+                size = 28; // Slightly larger for emphasis
+            }
+        } else if (isNegative) {
             color = '#ff0000';
             size = 28;
         } else if (scoringResult.comboMultiplier >= 3) {
@@ -703,10 +778,16 @@ export class Game extends BaseGame {
             bonusText = bonusText ? `${bonusText} | x${scoringResult.combo}` : `COMBO x${scoringResult.combo}`;
         }
         
+        // In versus mode, add player indicator
+        let playerIndicator = '';
+        if (this.multiplayerMode === 'versus' && this.isMultiplayer()) {
+            playerIndicator = `P${playerIndex + 1} `;
+        }
+        
         // Format score text
         const scoreText = isNegative 
             ? `${scoringResult.totalPoints}` 
-            : `+${scoringResult.totalPoints}`;
+            : `${playerIndicator}+${scoringResult.totalPoints}`;
         
         this.floatingScores.push({
             x: x,

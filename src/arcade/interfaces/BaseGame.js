@@ -376,8 +376,18 @@ export class BaseGame {
         
         const manifest = this.constructor.getManifest();
         
+        // Allow overriding minPlayers/defaultPlayers from options
+        const modifiedManifest = { ...manifest };
+        if (options.minPlayers !== undefined || options.defaultPlayers !== undefined) {
+            modifiedManifest.multiplayer = { 
+                ...manifest.multiplayer,
+                minPlayers: options.minPlayers ?? manifest.multiplayer?.minPlayers ?? 1,
+                defaultPlayers: options.defaultPlayers ?? manifest.multiplayer?.minPlayers ?? 1
+            };
+        }
+        
         const screen = new PlayerSelectScreen(this.uiLayer, {
-            manifest,
+            manifest: modifiedManifest,
             gunManager: this.system.gunManager,
             onStart: (playerCount, mode, gunAssignments) => {
                 // Initialize players
