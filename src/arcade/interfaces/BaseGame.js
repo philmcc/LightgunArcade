@@ -68,6 +68,9 @@ export class BaseGame {
         // Multiplayer support
         this.players = new PlayerManager();
         this._multiplayerConfig = null; // Set when starting multiplayer game
+        
+        // Single player gun locking (when multiple guns connected)
+        this._activeGunIndex = null; // null = all guns allowed, number = only that gun
     }
 
     // =========================================================================
@@ -483,5 +486,84 @@ export class BaseGame {
             onRetry: options.onRetry,
             onMenu: options.onMenu
         });
+    }
+
+    // =========================================================================
+    // SINGLE PLAYER GUN MANAGEMENT
+    // =========================================================================
+
+    /**
+     * Lock input to a specific gun for single player mode.
+     * When multiple guns are connected, only the specified gun can play.
+     * @param {number} gunIndex - Gun index to lock to (-1 for mouse, null for all guns)
+     */
+    setSinglePlayerGun(gunIndex) {
+        this._activeGunIndex = gunIndex;
+        
+        // Update cursor visibility
+        if (gunIndex !== null) {
+            this._updateSinglePlayerCursors(gunIndex);
+        } else {
+            this._resetCursorVisibility();
+        }
+    }
+
+    /**
+     * Get the active gun index for single player
+     * @returns {number|null} Active gun index, or null if all guns allowed
+     */
+    getActiveGunIndex() {
+        return this._activeGunIndex;
+    }
+
+    /**
+     * Check if a gun input should be allowed (for single player filtering)
+     * @param {number} gunIndex - Gun index from input event
+     * @returns {boolean} True if input should be processed
+     */
+    isGunInputAllowed(gunIndex) {
+        // If no restriction, allow all
+        if (this._activeGunIndex === null) return true;
+        // Otherwise only allow the active gun
+        return gunIndex === this._activeGunIndex;
+    }
+
+    /**
+     * Get the gun that last fired (for determining which gun started the game)
+     * @returns {number} Last trigger gun index (-1 for mouse/none)
+     */
+    getLastTriggerGunIndex() {
+        return this.system?.gunManager?.lastTriggerGunIndex ?? -1;
+    }
+
+    /**
+     * Hide all gun cursors except the active one (internal)
+     * @private
+     */
+    _updateSinglePlayerCursors(activeGunIndex) {
+        const gunManager = this.system?.gunManager;
+        if (!gunManager || !gunManager.cursorManager) return;
+        
+        const cursorManager = gunManager.cursorManager;
+        
+        // Hide all gun cursors except the active one
+        for (let i = 0; i < gunManager.guns.length; i++) {
+            const shouldShow = (i === activeGunIndex);
+            cursorManager.setCursorVisible(i, shouldShow);
+        }
+        
+        // Force update all cursor visibility
+        cursorManager.updateAllCursorVisibility();
+    }
+
+    /**
+     * Reset cursor visibility (show all cursors)
+     * @private
+     */
+    _resetCursorVisibility() {
+        const gunManager = this.system?.gunManager;
+        if (gunManager?.cursorManager) {
+            gunManager.cursorManager.resetCursorVisibility();
+        }
     }
 }

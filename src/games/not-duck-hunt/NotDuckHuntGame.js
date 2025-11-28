@@ -32,10 +32,6 @@ export class Game extends BaseGame {
             maxTimer: 2.0
         };
         
-        // Single player gun tracking
-        this.activeGunIndex = -1; // -1 = mouse, 0+ = gun index
-        this.lastInputGunIndex = -1; // Track last input for starting game
-        
         // Multiplayer mode
         this.multiplayerMode = 'coop'; // 'coop', 'versus', 'duel'
 
@@ -106,9 +102,10 @@ export class Game extends BaseGame {
             // Hide cursors for gameplay (SDK method)
             this.setInGame(true);
             
-            // Re-apply single player cursor hiding after setInGame
-            if (!this.isMultiplayer() && this.activeGunIndex !== null) {
-                this.setSinglePlayerCursors(this.activeGunIndex);
+            // Re-apply single player cursor hiding after setInGame (SDK method)
+            const activeGun = this.getActiveGunIndex();
+            if (!this.isMultiplayer() && activeGun !== null) {
+                this._updateSinglePlayerCursors(activeGun);
             }
             
             this.hidePauseMenu();
@@ -122,13 +119,9 @@ export class Game extends BaseGame {
     // SDK handles resize via onResize() hook - no manual handling needed
 
     handleShoot({ x, y, gunIndex }) {
-        // Track last input gun for single player game start
-        this.lastInputGunIndex = gunIndex;
-        
         if (this.state === "PLAYING") {
-            // In single player, only the active gun can play
-            if (!this.isMultiplayer() && this.activeGunIndex !== gunIndex) {
-                // Wrong gun - ignore input
+            // Use SDK method to check if this gun is allowed (single player filtering)
+            if (!this.isGunInputAllowed(gunIndex)) {
                 return;
             }
             
@@ -303,11 +296,8 @@ export class Game extends BaseGame {
         // Show cursors for menu (SDK method)
         this.setInGame(false);
         
-        // Reset cursor visibility (in case we were in single player)
-        const gunManager = this.system?.gunManager;
-        if (gunManager?.cursorManager) {
-            gunManager.cursorManager.resetCursorVisibility();
-        }
+        // Reset single player gun lock (SDK method)
+        this.setSinglePlayerGun(null);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>NOT DUCK HUNT</h1>
@@ -377,44 +367,16 @@ export class Game extends BaseGame {
             this.players.resetGame(3);
             multiplayerMode = 'single';
             
-            // Lock to the gun that started the game
-            // Check GunManager for last trigger, fall back to lastInputGunIndex
-            const gunManager = this.system?.gunManager;
-            if (gunManager && gunManager.lastTriggerGunIndex >= 0) {
-                this.activeGunIndex = gunManager.lastTriggerGunIndex;
-            } else {
-                this.activeGunIndex = this.lastInputGunIndex;
-            }
-            
-            // Hide other gun cursors in single player
-            this.setSinglePlayerCursors(this.activeGunIndex);
+            // Lock to the gun that started the game (SDK method)
+            const activeGun = this.getLastTriggerGunIndex();
+            this.setSinglePlayerGun(activeGun >= 0 ? activeGun : -1);
         } else {
-            // Multiplayer - all guns active
-            this.activeGunIndex = null; // null means all guns allowed
+            // Multiplayer - all guns active (SDK method)
+            this.setSinglePlayerGun(null);
         }
         
         this.multiplayerMode = multiplayerMode;
         this.roundManager.startGame(mode, multiplayerMode);
-    }
-    
-    /**
-     * In single player, only show the active gun's cursor
-     */
-    setSinglePlayerCursors(activeGunIndex) {
-        const gunManager = this.system?.gunManager;
-        if (!gunManager || !gunManager.cursorManager) return;
-        
-        const cursorManager = gunManager.cursorManager;
-        
-        // Hide all gun cursors except the active one
-        // Iterate through all possible gun indices
-        for (let i = 0; i < gunManager.guns.length; i++) {
-            const shouldShow = (i === activeGunIndex);
-            cursorManager.setCursorVisible(i, shouldShow);
-        }
-        
-        // Force update all cursor visibility to apply changes
-        cursorManager.updateAllCursorVisibility();
     }
 
     showPauseMenu() {
@@ -497,9 +459,10 @@ export class Game extends BaseGame {
             }
         }
         
-        // Show which gun is active in single player mode
+        // Show which gun is active in single player mode (using SDK method)
         if (roundNum === 1 && !this.isMultiplayer()) {
-            const gunLabel = this.activeGunIndex === -1 ? 'MOUSE' : `GUN ${this.activeGunIndex + 1}`;
+            const activeGun = this.getActiveGunIndex();
+            const gunLabel = activeGun === -1 ? 'MOUSE' : `GUN ${activeGun + 1}`;
             info = `${info} | Active: ${gunLabel}`;
         }
         
@@ -513,9 +476,10 @@ export class Game extends BaseGame {
                 this.state = "PLAYING";
                 this.setInGame(true);
                 
-                // Re-apply single player cursor hiding after setInGame
-                if (!this.isMultiplayer() && this.activeGunIndex !== null) {
-                    this.setSinglePlayerCursors(this.activeGunIndex);
+                // Re-apply single player cursor hiding after setInGame (SDK method)
+                const activeGun = this.getActiveGunIndex();
+                if (!this.isMultiplayer() && activeGun !== null) {
+                    this._updateSinglePlayerCursors(activeGun);
                 }
                 
                 this.showHUD();
@@ -536,9 +500,10 @@ export class Game extends BaseGame {
                 this.state = "PLAYING";
                 this.setInGame(true);
                 
-                // Re-apply single player cursor hiding after setInGame
-                if (!this.isMultiplayer() && this.activeGunIndex !== null) {
-                    this.setSinglePlayerCursors(this.activeGunIndex);
+                // Re-apply single player cursor hiding after setInGame (SDK method)
+                const activeGun = this.getActiveGunIndex();
+                if (!this.isMultiplayer() && activeGun !== null) {
+                    this._updateSinglePlayerCursors(activeGun);
                 }
                 
                 this.showHUD();
@@ -722,8 +687,9 @@ export class Game extends BaseGame {
     }
     
     addActiveGunIndicator() {
-        // Show which gun is active in single player
-        const gunLabel = this.activeGunIndex === -1 ? 'MOUSE' : `GUN ${this.activeGunIndex + 1}`;
+        // Show which gun is active in single player (using SDK method)
+        const activeGun = this.getActiveGunIndex();
+        const gunLabel = activeGun === -1 ? 'MOUSE' : `GUN ${activeGun + 1}`;
         const indicatorEl = document.createElement('div');
         indicatorEl.id = 'active-gun-indicator';
         indicatorEl.style.cssText = 'position: absolute; bottom: 20px; right: 20px; font-size: 14px; color: #888; font-weight: bold; text-shadow: 1px 1px 0 #000; padding: 5px 10px; background: rgba(0,0,0,0.5); border-radius: 5px;';
