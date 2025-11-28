@@ -32,6 +32,10 @@ export class Game extends BaseGame {
             maxTimer: 2.0
         };
         
+        // Single player gun tracking
+        this.activeGunIndex = -1; // -1 = mouse, 0+ = gun index
+        this.lastInputGunIndex = -1; // Track last input for starting game
+        
         // Multiplayer mode
         this.multiplayerMode = 'coop'; // 'coop', 'versus', 'duel'
 
@@ -112,7 +116,16 @@ export class Game extends BaseGame {
     // SDK handles resize via onResize() hook - no manual handling needed
 
     handleShoot({ x, y, gunIndex }) {
+        // Track last input gun for single player game start
+        this.lastInputGunIndex = gunIndex;
+        
         if (this.state === "PLAYING") {
+            // In single player, only the active gun can play
+            if (!this.isMultiplayer() && this.activeGunIndex !== gunIndex) {
+                // Wrong gun - ignore input
+                return;
+            }
+            
             this.sound.playShoot();
             
             // Get player index from gun (0 for single player/mouse)
@@ -346,11 +359,17 @@ export class Game extends BaseGame {
         // Hide cursors for gameplay (SDK method)
         this.setInGame(true);
         
-        // If single player, initialize with 1 player
+        // If single player, initialize with 1 player and lock to starting gun
         if (!this.isMultiplayer()) {
             this.players.initSession(1, { mode: 'single' });
             this.players.resetGame(3);
             multiplayerMode = 'single';
+            
+            // Lock to the gun that started the game
+            this.activeGunIndex = this.lastInputGunIndex;
+        } else {
+            // Multiplayer - all guns active
+            this.activeGunIndex = null; // null means all guns allowed
         }
         
         this.multiplayerMode = multiplayerMode;
@@ -435,6 +454,12 @@ export class Game extends BaseGame {
                     borderColor = '#2222aa';
                     break;
             }
+        }
+        
+        // Show which gun is active in single player mode
+        if (roundNum === 1 && !this.isMultiplayer()) {
+            const gunLabel = this.activeGunIndex === -1 ? 'MOUSE' : `GUN ${this.activeGunIndex + 1}`;
+            info = `${info} | Active: ${gunLabel}`;
         }
         
         this.ui.overlay.showIntro({
@@ -637,7 +662,20 @@ export class Game extends BaseGame {
                 round: `ROUND ${this.roundManager.currentRound}`,
                 ammo: 3
             });
+            
+            // Add active gun indicator for single player
+            this.addActiveGunIndicator();
         }
+    }
+    
+    addActiveGunIndicator() {
+        // Show which gun is active in single player
+        const gunLabel = this.activeGunIndex === -1 ? 'MOUSE' : `GUN ${this.activeGunIndex + 1}`;
+        const indicatorEl = document.createElement('div');
+        indicatorEl.id = 'active-gun-indicator';
+        indicatorEl.style.cssText = 'position: absolute; bottom: 20px; right: 20px; font-size: 14px; color: #888; font-weight: bold; text-shadow: 1px 1px 0 #000; padding: 5px 10px; background: rgba(0,0,0,0.5); border-radius: 5px;';
+        indicatorEl.textContent = `🎯 ${gunLabel}`;
+        this.uiLayer.appendChild(indicatorEl);
     }
     
     addTeamScoreDisplay() {
