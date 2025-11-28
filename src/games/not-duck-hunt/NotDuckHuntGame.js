@@ -351,6 +351,9 @@ export class Game extends BaseGame {
                     gunAssignments 
                 });
                 this.players.resetGame(3);
+                
+                // Flag that we're starting a multiplayer game
+                this._startingMultiplayer = true;
                 this.startGame('campaign', multiplayerMode);
             },
             onBack: () => this.showMenu()
@@ -361,8 +364,11 @@ export class Game extends BaseGame {
         // Hide cursors for gameplay (SDK method)
         this.setInGame(true);
         
-        // If single player, initialize with 1 player and lock to starting gun
-        if (!this.isMultiplayer()) {
+        // Check if this is a single player game (multiplayerMode not set by player select)
+        const isSinglePlayer = (multiplayerMode === 'coop' && !this._startingMultiplayer);
+        
+        if (isSinglePlayer) {
+            // Single player - initialize with 1 player
             this.players.initSession(1, { mode: 'single' });
             this.players.resetGame(3);
             multiplayerMode = 'single';
@@ -374,6 +380,9 @@ export class Game extends BaseGame {
             // Multiplayer - all guns active (SDK method)
             this.setSinglePlayerGun(null);
         }
+        
+        // Reset the multiplayer flag
+        this._startingMultiplayer = false;
         
         this.multiplayerMode = multiplayerMode;
         this.roundManager.startGame(mode, multiplayerMode);
