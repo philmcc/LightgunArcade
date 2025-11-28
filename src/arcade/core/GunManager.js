@@ -35,6 +35,9 @@ export class GunManager {
         // Callbacks for game integration
         this.onShoot = null; // Called when trigger is pressed: (gunIndex, x, y) => {}
         
+        // Event listeners
+        this.eventListeners = new Map();
+        
         // Bound handlers for cleanup
         this._boundPointerHandler = this.handleDetectionInput.bind(this);
 
@@ -81,6 +84,45 @@ export class GunManager {
             guns: this.guns, 
             webHIDSupported: this.useWebHID 
         });
+    }
+
+    /**
+     * Register an event listener
+     * @param {string} event - Event name ('startButton', etc.)
+     * @param {function} callback - Callback function
+     */
+    on(event, callback) {
+        if (!this.eventListeners.has(event)) {
+            this.eventListeners.set(event, []);
+        }
+        this.eventListeners.get(event).push(callback);
+    }
+
+    /**
+     * Remove an event listener
+     * @param {string} event - Event name
+     * @param {function} callback - Callback to remove
+     */
+    off(event, callback) {
+        const listeners = this.eventListeners.get(event);
+        if (listeners) {
+            const index = listeners.indexOf(callback);
+            if (index !== -1) {
+                listeners.splice(index, 1);
+            }
+        }
+    }
+
+    /**
+     * Emit an event to all listeners
+     * @param {string} event - Event name
+     * @param {...any} args - Arguments to pass to listeners
+     */
+    emit(event, ...args) {
+        const listeners = this.eventListeners.get(event);
+        if (listeners) {
+            listeners.forEach(callback => callback(...args));
+        }
     }
     
     /**
@@ -463,11 +505,6 @@ export class GunManager {
                 this.cursorManager.updateCursor(gun.index, gun.state.x, gun.state.y);
             }
         }
-        
-        // Debug: log occasionally to confirm input is flowing
-        if (Math.random() < 0.01) {
-            console.log(`HID input: gun ${gun.index} at (${gun.state.x?.toFixed(0)}, ${gun.state.y?.toFixed(0)}), inGame=${this.cursorManager?.inGame}`);
-        }
 
         // Handle button presses
         const triggerBtn = gun.config.buttons.trigger;
@@ -485,10 +522,20 @@ export class GunManager {
                                (triggerBtn === 1 && rightPressed) ||
                                (triggerBtn === 2 && middlePressed);
         
+        // Check if start button was pressed
+        const startPressed = (startBtn === 0 && leftPressed) ||
+                             (startBtn === 1 && rightPressed) ||
+                             (startBtn === 2 && middlePressed);
+        
         // Update trigger state
         gun.state.isTriggerDown = (triggerBtn === 0 && inputData.buttons.left) ||
                                   (triggerBtn === 1 && inputData.buttons.right) ||
                                   (triggerBtn === 2 && inputData.buttons.middle);
+        
+        // Fire start button event if pressed (for pause/menu)
+        if (startPressed) {
+            this.emit('startButton', gun.index);
+        }
         
         // Fire shoot event if trigger was just pressed
         if (triggerPressed) {

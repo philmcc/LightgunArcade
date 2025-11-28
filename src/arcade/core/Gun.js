@@ -15,6 +15,7 @@ export class Gun {
             hidDeviceId: null,    // WebHID device ID for distinguishing multiple guns
             deviceType: 'mouse',  // 'mouse', 'sinden', 'gun4ir', etc.
             deviceName: '',       // Human-readable device name
+            showCursor: true,     // Whether to show cursor for this gun
             buttons: {
                 trigger: 0,         // Button index for trigger
                 reload: 2,          // Button index for reload (or 'offscreen')

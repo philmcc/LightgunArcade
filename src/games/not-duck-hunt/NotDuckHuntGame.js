@@ -36,13 +36,22 @@ export class Game extends BaseGame {
         // Bind input
         this.input.on("shoot", (coords) => this.handleShoot(coords));
 
-        // Bind ESC key for pause
+        // Bind Space key for pause
         this.keydownHandler = (e) => {
-            if (e.key === "Escape" && (this.state === "PLAYING" || this.state === "PAUSED")) {
+            if (e.code === "Space" && (this.state === "PLAYING" || this.state === "PAUSED")) {
+                e.preventDefault(); // Prevent page scroll
                 this.togglePause();
             }
         };
         window.addEventListener("keydown", this.keydownHandler);
+        
+        // Bind gun start button for pause
+        this.startButtonHandler = (gunIndex) => {
+            if (this.state === "PLAYING" || this.state === "PAUSED") {
+                this.togglePause();
+            }
+        };
+        this.system.gunManager.on('startButton', this.startButtonHandler);
     }
 
     static getManifest() {
@@ -61,6 +70,7 @@ export class Game extends BaseGame {
     destroy() {
         window.removeEventListener("resize", this.resizeHandler);
         window.removeEventListener("keydown", this.keydownHandler);
+        this.system.gunManager.off('startButton', this.startButtonHandler);
         if (this.input && this.input.destroy) {
             this.input.destroy();
         }

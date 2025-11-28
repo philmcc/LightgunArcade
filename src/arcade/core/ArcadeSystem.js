@@ -241,74 +241,79 @@ export class ArcadeSystem {
                 <h2>SETTINGS</h2>
                 
                 <div class="setting-row">
-                    <label>Input Method:</label>
-                    <select id="input-select">
-                        <option value="mouse">Mouse / Touch</option>
-                        <option value="gun4ir">Gun4IR</option>
-                        <option value="sinden">Sinden Lightgun</option>
-                    </select>
+                    <label>Fullscreen:</label>
+                    <input type="checkbox" id="fullscreen-check" ${this.settings.isFullscreen ? 'checked' : ''}>
                 </div>
 
-                <div id="sinden-options" class="${this.settings.inputMethod === 'sinden' ? '' : 'hidden'}">
+                <div id="sinden-options">
                     <div class="setting-row">
-                        <label>Border Enabled:</label>
+                        <label>Sinden Border:</label>
                         <input type="checkbox" id="sinden-check" ${this.settings.sindenEnabled ? 'checked' : ''}>
                     </div>
-                    <div class="setting-row">
+                    <div class="setting-row ${this.settings.sindenEnabled ? '' : 'hidden'}" id="sinden-thickness-row">
                         <label>Border Thickness:</label>
                         <input type="range" id="sinden-thick" min="1" max="50" value="${this.settings.sindenThickness}">
                     </div>
-                    <div class="setting-row">
+                    <div class="setting-row ${this.settings.sindenEnabled ? '' : 'hidden'}" id="sinden-color-row">
                         <label>Border Color:</label>
                         <input type="color" id="sinden-color" value="${this.settings.sindenColor}">
                     </div>
                 </div>
                 
-                <div class="setting-row">
-                    <label>Fullscreen:</label>
-                    <input type="checkbox" id="fullscreen-check" ${this.settings.isFullscreen ? 'checked' : ''}>
-                </div>
-                
-                <div class="setting-row">
-                    <label>Show Cursors In-Game:</label>
-                    <input type="checkbox" id="gun-cursors-check" ${this.settings.showGunCursors ? 'checked' : ''}>
-                </div>
-                
+                <button id="btn-gun-setup" class="btn-primary" style="margin-top: 1rem;">GUN SETUP</button>
                 <button id="btn-back-arcade">BACK</button>
             </div>
         `;
 
-        const inputSelect = document.getElementById("input-select");
-        const sindenOptions = document.getElementById("sinden-options");
+        const fullscreenCheck = document.getElementById("fullscreen-check");
         const sindenCheck = document.getElementById("sinden-check");
         const sindenThick = document.getElementById("sinden-thick");
         const sindenColor = document.getElementById("sinden-color");
-        const fullscreenCheck = document.getElementById("fullscreen-check");
-        const gunCursorsCheck = document.getElementById("gun-cursors-check");
+        const sindenThicknessRow = document.getElementById("sinden-thickness-row");
+        const sindenColorRow = document.getElementById("sinden-color-row");
 
-        inputSelect.value = this.settings.inputMethod;
-
-        inputSelect.onchange = (e) => {
-            this.settings.setInputMethod(e.target.value);
-            if (e.target.value === 'sinden') {
-                sindenOptions.classList.remove('hidden');
+        fullscreenCheck.onchange = (e) => this.settings.setFullscreen(e.target.checked);
+        
+        sindenCheck.onchange = (e) => {
+            this.settings.setSindenEnabled(e.target.checked);
+            if (e.target.checked) {
+                sindenThicknessRow.classList.remove('hidden');
+                sindenColorRow.classList.remove('hidden');
             } else {
-                sindenOptions.classList.add('hidden');
+                sindenThicknessRow.classList.add('hidden');
+                sindenColorRow.classList.add('hidden');
             }
         };
-
-        sindenCheck.onchange = (e) => this.settings.setSindenEnabled(e.target.checked);
         sindenThick.oninput = (e) => this.settings.setSindenThickness(e.target.value);
         sindenColor.oninput = (e) => this.settings.setSindenColor(e.target.value);
-        fullscreenCheck.onchange = () => this.settings.toggleFullscreen();
-        gunCursorsCheck.onchange = (e) => this.settings.setShowGunCursors(e.target.checked);
 
+        document.getElementById("btn-gun-setup").onclick = () => {
+            // Pass callback to return to settings after gun setup
+            this.showGunSetup(() => this.showSettings());
+        };
         document.getElementById("btn-back-arcade").onclick = () => this.showArcadeMenu();
     }
 
-    showGunSetup() {
+    showGunSetup(returnCallback = null) {
+        this.previousState = this.state;
+        this.gunSetupReturnCallback = returnCallback;
         this.state = 'GUN_SETUP';
         this.gunSetupMenu.show();
+    }
+
+    returnFromGunSetup() {
+        // Restore previous state before calling callback
+        if (this.previousState) {
+            this.state = this.previousState;
+            this.previousState = null;
+        }
+        
+        if (this.gunSetupReturnCallback) {
+            this.gunSetupReturnCallback();
+            this.gunSetupReturnCallback = null;
+        } else {
+            this.showArcadeMenu();
+        }
     }
 
     update(dt) {

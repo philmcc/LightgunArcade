@@ -49,6 +49,8 @@ export class GunSetupMenu {
                 deviceType = 'mouse';
             }
 
+            const showCursor = gun.config.showCursor !== false;
+            
             return `
         <div class="gun-slot ${statusClass}" data-index="${gun.index}">
           <div class="gun-header" style="border-color: ${gun.color}">
@@ -71,6 +73,10 @@ export class GunSetupMenu {
             <div class="detail-row">
               <label>Reload:</label>
               <span>Btn ${gun.config.buttons.reload}</span>
+            </div>
+            <div class="detail-row">
+              <label>Show Cursor:</label>
+              <input type="checkbox" class="cursor-toggle" data-index="${gun.index}" ${showCursor ? 'checked' : ''}>
             </div>
           </div>
           <div class="gun-actions">
@@ -153,7 +159,7 @@ export class GunSetupMenu {
         // Back button
         document.getElementById('btn-back-arcade').onclick = () => {
             this.gunManager.stopDetection();
-            this.arcade.showArcadeMenu();
+            this.arcade.returnFromGunSetup();
         };
 
         // WebHID: Add lightguns button
@@ -213,6 +219,22 @@ export class GunSetupMenu {
             btn.onclick = (e) => {
                 const index = parseInt(e.target.dataset.index);
                 this.showDeviceSelector(index);
+            };
+        });
+
+        // Cursor visibility toggles
+        document.querySelectorAll('.cursor-toggle').forEach(checkbox => {
+            checkbox.onchange = async (e) => {
+                const index = parseInt(e.target.dataset.index);
+                const gun = this.gunManager.guns[index];
+                if (gun) {
+                    gun.config.showCursor = e.target.checked;
+                    await this.gunManager.saveProfiles();
+                    // Update cursor visibility immediately
+                    if (this.gunManager.cursorManager) {
+                        this.gunManager.cursorManager.updateAllCursorVisibility();
+                    }
+                }
             };
         });
     }

@@ -14,6 +14,12 @@ export class Settings {
 
         this.load();
         this.apply();
+        
+        // Listen for fullscreen changes (e.g., user presses ESC)
+        document.addEventListener('fullscreenchange', () => {
+            this.isFullscreen = !!document.fullscreenElement;
+            this.save();
+        });
     }
 
     load() {
@@ -94,14 +100,20 @@ export class Settings {
         this.save();
     }
 
-    toggleFullscreen() {
-        this.isFullscreen = !this.isFullscreen;
+    setFullscreen(enabled) {
+        console.log('setFullscreen called with:', enabled);
+        this.isFullscreen = enabled;
 
-        if (this.isFullscreen) {
+        if (enabled) {
             // Request fullscreen
             const elem = document.documentElement;
+            console.log('Requesting fullscreen on:', elem);
             if (elem.requestFullscreen) {
-                elem.requestFullscreen();
+                elem.requestFullscreen().then(() => {
+                    console.log('Fullscreen entered successfully');
+                }).catch(err => {
+                    console.warn('Fullscreen request failed:', err);
+                });
             } else if (elem.webkitRequestFullscreen) {
                 elem.webkitRequestFullscreen();
             } else if (elem.msRequestFullscreen) {
@@ -109,16 +121,27 @@ export class Settings {
             }
         } else {
             // Exit fullscreen
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            } else if (document.webkitExitFullscreen) {
-                document.webkitExitFullscreen();
-            } else if (document.msExitFullscreen) {
-                document.msExitFullscreen();
+            console.log('Exiting fullscreen, current element:', document.fullscreenElement);
+            if (document.fullscreenElement) {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().then(() => {
+                        console.log('Exited fullscreen successfully');
+                    }).catch(err => {
+                        console.warn('Exit fullscreen failed:', err);
+                    });
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
             }
         }
 
         this.save();
+    }
+
+    toggleFullscreen() {
+        this.setFullscreen(!this.isFullscreen);
     }
 
     setShowGunCursors(enabled) {

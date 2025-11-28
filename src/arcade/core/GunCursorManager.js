@@ -105,10 +105,22 @@ export class GunCursorManager {
         const gun = this.gunManager.guns[gunIndex];
         
         // Determine if cursor should be visible:
-        // - Always show in menus (not in game)
-        // - In game: only show if showCursorsInGame setting is true
-        const shouldShow = gun && gun.state.isConnected && 
-                          (!this.inGame || this.showCursorsInGame);
+        // - Gun must be connected
+        // - In menus (not in game): always show cursor
+        // - In game: check per-gun showCursor setting
+        const isConnected = gun && gun.state.isConnected;
+        const gunCursorEnabled = gun?.config?.showCursor !== false; // Default to true
+        
+        let shouldShow = false;
+        if (isConnected) {
+            if (this.inGame) {
+                // In game: respect per-gun setting
+                shouldShow = gunCursorEnabled;
+            } else {
+                // In menus: always show
+                shouldShow = true;
+            }
+        }
         
         // Always update position, visibility is separate
         cursor.style.left = `${x}px`;
@@ -130,7 +142,6 @@ export class GunCursorManager {
      * Set whether we're currently in a game (affects cursor visibility based on settings)
      */
     setInGame(inGame) {
-        console.log('GunCursorManager.setInGame:', inGame);
         this.inGame = inGame;
         this.updateAllCursorVisibility();
     }
@@ -147,12 +158,21 @@ export class GunCursorManager {
      * Update visibility of all cursors based on current state
      */
     updateAllCursorVisibility() {
-        console.log('updateAllCursorVisibility: inGame=', this.inGame, 'showCursorsInGame=', this.showCursorsInGame);
         this.cursorElements.forEach((cursor, gunIndex) => {
             const gun = this.gunManager.guns[gunIndex];
             const isConnected = gun && gun.state.isConnected;
-            const shouldShow = isConnected && (!this.inGame || this.showCursorsInGame);
-            console.log(`  Gun ${gunIndex}: connected=${isConnected}, shouldShow=${shouldShow}, pos=(${gun?.state?.x}, ${gun?.state?.y}), cursor.left=${cursor.style.left}`);
+            const gunCursorEnabled = gun?.config?.showCursor !== false;
+            
+            let shouldShow = false;
+            if (isConnected) {
+                if (this.inGame) {
+                    // In game: respect per-gun setting
+                    shouldShow = gunCursorEnabled;
+                } else {
+                    // In menus: always show
+                    shouldShow = true;
+                }
+            }
             
             if (shouldShow) {
                 cursor.style.display = 'block';
