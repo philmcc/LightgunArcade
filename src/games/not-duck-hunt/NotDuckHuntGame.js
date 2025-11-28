@@ -296,6 +296,12 @@ export class Game extends BaseGame {
         this.state = "MENU";
         // Show cursors for menu (SDK method)
         this.setInGame(false);
+        
+        // Reset cursor visibility (in case we were in single player)
+        const gunManager = this.system?.gunManager;
+        if (gunManager?.cursorManager) {
+            gunManager.cursorManager.resetCursorVisibility();
+        }
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>NOT DUCK HUNT</h1>
@@ -366,7 +372,16 @@ export class Game extends BaseGame {
             multiplayerMode = 'single';
             
             // Lock to the gun that started the game
-            this.activeGunIndex = this.lastInputGunIndex;
+            // Check GunManager for last trigger, fall back to lastInputGunIndex
+            const gunManager = this.system?.gunManager;
+            if (gunManager && gunManager.lastTriggerGunIndex >= 0) {
+                this.activeGunIndex = gunManager.lastTriggerGunIndex;
+            } else {
+                this.activeGunIndex = this.lastInputGunIndex;
+            }
+            
+            // Hide other gun cursors in single player
+            this.setSinglePlayerCursors(this.activeGunIndex);
         } else {
             // Multiplayer - all guns active
             this.activeGunIndex = null; // null means all guns allowed
@@ -374,6 +389,22 @@ export class Game extends BaseGame {
         
         this.multiplayerMode = multiplayerMode;
         this.roundManager.startGame(mode, multiplayerMode);
+    }
+    
+    /**
+     * In single player, only show the active gun's cursor
+     */
+    setSinglePlayerCursors(activeGunIndex) {
+        const gunManager = this.system?.gunManager;
+        if (!gunManager || !gunManager.cursorManager) return;
+        
+        // Hide all gun cursors except the active one
+        gunManager.guns.forEach((gun, index) => {
+            if (gun.isAssigned) {
+                const shouldShow = (index === activeGunIndex);
+                gunManager.cursorManager.setCursorVisible(index, shouldShow);
+            }
+        });
     }
 
     showPauseMenu() {

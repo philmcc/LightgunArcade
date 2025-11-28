@@ -108,13 +108,15 @@ export class GunCursorManager {
         
         // Determine if cursor should be visible:
         // - Gun must be connected
+        // - Not forced hidden (single player mode)
         // - In menus (not in game): always show cursor
         // - In game: check per-gun showCursor setting
         const isConnected = gun && gun.state.isConnected;
         const gunCursorEnabled = gun?.config?.showCursor !== false; // Default to true
+        const forcedHidden = cursor.dataset.forcedHidden === 'true';
         
         let shouldShow = false;
-        if (isConnected) {
+        if (isConnected && !forcedHidden) {
             if (this.inGame) {
                 // In game: respect per-gun setting
                 shouldShow = gunCursorEnabled;
@@ -164,9 +166,10 @@ export class GunCursorManager {
             const gun = this.gunManager.guns[gunIndex];
             const isConnected = gun && gun.state.isConnected;
             const gunCursorEnabled = gun?.config?.showCursor !== false;
+            const forcedHidden = cursor.dataset.forcedHidden === 'true';
             
             let shouldShow = false;
-            if (isConnected) {
+            if (isConnected && !forcedHidden) {
                 if (this.inGame) {
                     // In game: respect per-gun setting
                     shouldShow = gunCursorEnabled;
@@ -199,6 +202,32 @@ export class GunCursorManager {
                 cursor.style.display = 'none';
             });
         }
+    }
+    
+    /**
+     * Set visibility for a specific cursor (for single player mode)
+     * @param {number} gunIndex - Gun index
+     * @param {boolean} visible - Whether cursor should be visible
+     */
+    setCursorVisible(gunIndex, visible) {
+        const cursor = this.cursorElements.get(gunIndex);
+        if (cursor) {
+            // Store forced visibility state
+            cursor.dataset.forcedHidden = visible ? 'false' : 'true';
+            if (!visible) {
+                cursor.style.display = 'none';
+            }
+        }
+    }
+    
+    /**
+     * Reset all cursor visibility overrides (call when returning to menu or multiplayer)
+     */
+    resetCursorVisibility() {
+        this.cursorElements.forEach((cursor) => {
+            cursor.dataset.forcedHidden = 'false';
+        });
+        this.updateAllCursorVisibility();
     }
 
     /**

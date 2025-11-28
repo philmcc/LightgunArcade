@@ -32,6 +32,9 @@ export class GunManager {
         // Track pending device assignment
         this.pendingAssignment = null;
         
+        // Track last gun that fired (for single player detection)
+        this.lastTriggerGunIndex = -1; // -1 = mouse/none, 0+ = gun index
+        
         // Callbacks for game integration
         this.onShoot = null; // Called when trigger is pressed: (gunIndex, x, y) => {}
         
@@ -539,6 +542,9 @@ export class GunManager {
         
         // Fire shoot event if trigger was just pressed
         if (triggerPressed) {
+            // Track last gun that fired (for single player game start)
+            this.lastTriggerGunIndex = gun.index;
+            
             // Try to click UI element first
             let clickedUI = false;
             if (this.cursorManager) {
