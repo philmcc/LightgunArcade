@@ -63,6 +63,31 @@ export class SoundManager {
         osc.stop(this.ctx.currentTime + 1.0);
     }
 
+    playGameClear() {
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        // Victory fanfare - ascending notes
+        const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+        notes.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = 'sine';
+            const startTime = this.ctx.currentTime + (i * 0.15);
+
+            osc.frequency.setValueAtTime(freq, startTime);
+
+            gain.gain.setValueAtTime(0.3, startTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.3);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            osc.start(startTime);
+            osc.stop(startTime + 0.3);
+        });
+    }
+
     playTick() {
         if (this.ctx.state === 'suspended') this.ctx.resume();
 

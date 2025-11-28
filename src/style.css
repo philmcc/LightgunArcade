@@ -126,6 +126,8 @@ button:active {
 
 input[type="range"] {
   width: 200px;
+  height: 30px;
+  cursor: pointer;
 }
 
 input[type="color"] {
@@ -133,6 +135,37 @@ input[type="color"] {
   width: 50px;
   height: 30px;
   cursor: pointer;
+}
+
+/* Large toggle buttons for lightgun shooting (replaces checkboxes) */
+.toggle-btn {
+  width: 80px;
+  height: 50px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--secondary-color);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #fff;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+
+.toggle-btn:hover {
+  background: rgba(0, 204, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.toggle-btn.active {
+  background: var(--secondary-color);
+  border-color: var(--secondary-color);
+  color: #000;
+}
+
+/* Hide actual checkboxes when using toggle buttons */
+input[type="checkbox"].hidden-checkbox {
+  display: none;
 }
 
 .hidden {
@@ -849,4 +882,258 @@ button.primary:hover {
   font-size: 0.9rem;
   opacity: 0.8;
   text-transform: uppercase;
+}
+
+/* ==================== Player Select Screen ==================== */
+.player-select-screen {
+  max-width: 600px;
+}
+
+.player-select-screen h3 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1rem;
+  color: var(--secondary-color);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.player-count-buttons,
+.mode-buttons {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.player-count-btn,
+.mode-btn {
+  padding: 0.75rem 1.5rem;
+  font-size: 1.2rem;
+  font-weight: bold;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid var(--secondary-color);
+  color: #fff;
+  cursor: pointer;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  min-width: 60px;
+}
+
+.player-count-btn:hover,
+.mode-btn:hover {
+  background: rgba(0, 204, 255, 0.2);
+}
+
+.player-count-btn.selected,
+.mode-btn.selected {
+  background: var(--secondary-color);
+  color: #000;
+  border-color: var(--secondary-color);
+}
+
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 100px;
+}
+
+.mode-icon {
+  font-size: 1.5rem;
+}
+
+.mode-name {
+  font-size: 0.9rem;
+}
+
+.player-slots {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.player-slot {
+  width: 120px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 3px solid var(--player-color, #666);
+  border-radius: 0.5rem;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.player-slot.inactive {
+  opacity: 0.3;
+  border-color: #444;
+}
+
+.player-slot.active {
+  background: rgba(var(--player-color), 0.1);
+  box-shadow: 0 0 15px rgba(var(--player-color), 0.3);
+}
+
+.slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.player-number {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: var(--player-color, #fff);
+}
+
+.player-color-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+}
+
+.slot-status {
+  font-size: 0.85rem;
+  padding: 0.25rem;
+}
+
+.gun-ready {
+  color: #44ff44;
+}
+
+.gun-missing {
+  color: #ffaa00;
+}
+
+.slot-empty {
+  color: #666;
+}
+
+.action-buttons {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.btn-large {
+  padding: 1rem 2rem;
+  font-size: 1.3rem;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================== Multiplayer HUD ==================== */
+.multiplayer-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.player-hud-section {
+  position: absolute;
+  padding: 10px 15px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 0 0 10px 0;
+  border-left: 4px solid var(--player-color, #fff);
+}
+
+.player-hud-section.p1 {
+  top: 0;
+  left: 0;
+  --player-color: #ff4444;
+}
+
+.player-hud-section.p2 {
+  top: 0;
+  right: 0;
+  border-radius: 0 0 0 10px;
+  border-left: none;
+  border-right: 4px solid var(--player-color, #fff);
+  --player-color: #4444ff;
+}
+
+.player-hud-section .player-label {
+  font-size: 0.8rem;
+  color: var(--player-color);
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.player-hud-section .player-score {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.player-hud-section .player-lives {
+  font-size: 1rem;
+  color: #fff;
+}
+
+/* ==================== Multiplayer Results ==================== */
+.results-screen {
+  max-width: 500px;
+}
+
+.results-players {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  border-left: 4px solid var(--player-color, #666);
+}
+
+.result-row.winner {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: #ffd700;
+}
+
+.result-rank {
+  font-size: 2rem;
+  font-weight: bold;
+  width: 50px;
+  color: var(--player-color, #fff);
+}
+
+.result-rank.first {
+  color: #ffd700;
+}
+
+.result-info {
+  flex: 1;
+}
+
+.result-name {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--player-color, #fff);
+}
+
+.result-stats {
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.result-score {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fff;
 }

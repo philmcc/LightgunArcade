@@ -1,7 +1,4 @@
 import { BaseGame } from '../../arcade/interfaces/BaseGame.js';
-import { InputManager } from '../../shared/InputManager.js';
-import { SoundManager } from '../../shared/SoundManager.js';
-import { HighScoreManager } from './HighScoreManager.js';
 import { RoundManager } from './RoundManager.js';
 import { BackgroundManager } from './BackgroundManager.js';
 
@@ -9,12 +6,8 @@ export class Game extends BaseGame {
     constructor(canvas, uiLayer, system) {
         super(canvas, uiLayer, system);
 
-        this.settings = system.settings;
-        // Pass gunManager to InputManager for WebHID lightgun support
-        this.input = new InputManager(this.canvas, system.gunManager);
-        this.sound = new SoundManager();
+        // SDK provides: this.input, this.sound, this.highScores, this.settings
         this.roundManager = new RoundManager(this);
-        this.highScores = new HighScoreManager();
         this.backgroundManager = new BackgroundManager();
 
         this.state = "MENU"; // MENU, MODE_SELECT, DIFFICULTY_SELECT, PLAYING, ROUND_INTRO, ROUND_RESULT, GAME_OVER
@@ -28,84 +21,88 @@ export class Game extends BaseGame {
         this.dogTimer = 0;
         this.dogDuration = 1.5;
 
-        // Resize handling
-        this.resizeHandler = () => this.resize();
-        window.addEventListener("resize", this.resizeHandler);
-        this.resize();
-
-        // Bind input
+        // Bind input via SDK-provided InputManager
         this.input.on("shoot", (coords) => this.handleShoot(coords));
-
-        // Bind Space key for pause
-        this.keydownHandler = (e) => {
-            if (e.code === "Space" && (this.state === "PLAYING" || this.state === "PAUSED")) {
-                e.preventDefault(); // Prevent page scroll
-                this.togglePause();
-            }
-        };
-        window.addEventListener("keydown", this.keydownHandler);
-        
-        // Bind gun start button for pause
-        this.startButtonHandler = (gunIndex) => {
-            if (this.state === "PLAYING" || this.state === "PAUSED") {
-                this.togglePause();
-            }
-        };
-        this.system.gunManager.on('startButton', this.startButtonHandler);
     }
 
     static getManifest() {
         return {
             id: 'not-duck-hunt',
             name: 'Not Duck Hunt',
-            description: 'Classic shooting gallery',
-            isAvailable: true
+            version: '1.0.0',
+            author: 'Lightgun Arcade',
+            description: 'Classic shooting gallery inspired by the NES classic',
+            isAvailable: true,
+            modes: ['campaign', 'endless'],
+            difficulties: ['normal'],
+            multiplayer: {
+                minPlayers: 1,
+                maxPlayers: 2,
+                supportedModes: [
+                    { id: 'coop', name: 'Co-op', type: 'cooperative', simultaneous: true }
+                ]
+            },
+            features: {
+                requiresReload: false,
+                hasAchievements: false
+            }
         };
     }
 
     async init() {
+        // Enable SDK event handling for keyboard and start button
+        this.enableKeyboardEvents();
+        this.enableStartButton();
+        
         this.showMenu();
     }
 
-    destroy() {
-        window.removeEventListener("resize", this.resizeHandler);
-        window.removeEventListener("keydown", this.keydownHandler);
-        this.system.gunManager.off('startButton', this.startButtonHandler);
-        if (this.input && this.input.destroy) {
-            this.input.destroy();
+    // SDK calls destroy() automatically via _cleanup()
+    // No need to manually remove event listeners - SDK handles it
+
+    // SDK lifecycle hook: called when start button is pressed
+    onStartButton(gunIndex) {
+        if (this.state === "PLAYING" || this.state === "PAUSED") {
+            this.togglePause();
+        }
+    }
+
+    // SDK lifecycle hook: called when key is pressed
+    onKeyDown(event) {
+        if (event.code === "Space" && (this.state === "PLAYING" || this.state === "PAUSED")) {
+            event.preventDefault();
+            this.togglePause();
         }
     }
 
     togglePause() {
         if (this.state === "PLAYING") {
             this.state = "PAUSED";
-            // Show cursors for pause menu
-            this.system.gunManager.setInGame(false);
+            // Show cursors for pause menu (SDK method)
+            this.setInGame(false);
             this.showPauseMenu();
         } else if (this.state === "PAUSED") {
             this.state = "PLAYING";
-            // Hide cursors for gameplay (respects user setting)
-            this.system.gunManager.setInGame(true);
+            // Hide cursors for gameplay (SDK method)
+            this.setInGame(true);
             this.hidePauseMenu();
         }
     }
 
     hidePauseMenu() {
-        const pauseOverlay = document.getElementById('pause-overlay');
-        if (pauseOverlay) {
-            pauseOverlay.remove();
-        }
+        this.ui.overlay.hidePauseMenu();
     }
 
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-    }
+    // SDK handles resize via onResize() hook - no manual handling needed
 
-    handleShoot({ x, y }) {
+    handleShoot({ x, y, gunIndex }) {
         if (this.state === "PLAYING") {
             this.sound.playShoot();
-            this.roundManager.handleShoot(x, y);
+            
+            // Get player index from gun (0 for single player/mouse)
+            const playerIndex = this.getPlayerIndexFromGun(gunIndex);
+            
+            this.roundManager.handleShoot(x, y, playerIndex);
         }
     }
 
@@ -171,12 +168,6 @@ export class Game extends BaseGame {
         ctx.globalAlpha = 1;
     }
 
-    updateScoreDisplay() {
-        const scoreEl = document.getElementById('score-display');
-        if (scoreEl) {
-            scoreEl.textContent = this.roundManager.score;
-        }
-    }
 
     hideDog() {
         // Implementation for hiding dog if it was a DOM element, 
@@ -188,14 +179,17 @@ export class Game extends BaseGame {
 
     showMenu() {
         this.state = "MENU";
-        // Show cursors for menu
-        this.system.gunManager.setInGame(false);
+        // Show cursors for menu (SDK method)
+        this.setInGame(false);
         this.uiLayer.innerHTML = `
       <div class="screen">
         <h1>NOT DUCK HUNT</h1>
         <div class="difficulty-select">
             <button id="btn-campaign" class="diff-btn">CAMPAIGN</button>
             <button id="btn-endless" class="diff-btn">ENDLESS</button>
+        </div>
+        <div style="margin-top: 15px;">
+            <button id="btn-2player" class="btn-primary">2 PLAYER CO-OP</button>
         </div>
         <div style="margin-top: 20px;">
             <button id="btn-highscores">HIGH SCORES</button>
@@ -207,156 +201,144 @@ export class Game extends BaseGame {
 
         document.getElementById("btn-campaign").onclick = () => this.startGame('campaign');
         document.getElementById("btn-endless").onclick = () => this.startGame('endless');
+        document.getElementById("btn-2player").onclick = () => this.showPlayerSelectMenu();
         document.getElementById("btn-highscores").onclick = () => this.showHighScores();
-        document.getElementById("btn-settings").onclick = () => this.showSettings();
-        document.getElementById("btn-exit-arcade").onclick = () => this.system.returnToArcade();
+        document.getElementById("btn-settings").onclick = () => this._showSettingsScreen();
+        document.getElementById("btn-exit-arcade").onclick = () => this.returnToArcade();
+    }
+
+    /**
+     * Show player selection screen for multiplayer
+     */
+    showPlayerSelectMenu() {
+        this.showPlayerSelect({
+            onStart: (playerCount, mode, gunAssignments) => {
+                // Reset players for new game
+                this.players.resetGame(3);
+                this.startGame('campaign'); // Multiplayer uses campaign mode
+            },
+            onBack: () => this.showMenu()
+        });
     }
 
     startGame(mode) {
-        // Hide cursors for gameplay (respects user setting)
-        this.system.gunManager.setInGame(true);
+        // Hide cursors for gameplay (SDK method)
+        this.setInGame(true);
+        
+        // If single player, initialize with 1 player
+        if (!this.isMultiplayer()) {
+            this.players.initSession(1, { mode: 'single' });
+            this.players.resetGame(3);
+        }
+        
         this.roundManager.startGame(mode);
     }
 
     showPauseMenu() {
-        const pauseOverlay = document.createElement('div');
-        pauseOverlay.id = 'pause-overlay';
-        pauseOverlay.innerHTML = `
-      <div class="screen pause-menu">
-        <h1>PAUSED</h1>
-        <button id="btn-resume">RESUME</button>
-        <button id="btn-quit">QUIT TO MENU</button>
-        <button id="btn-arcade-quit">QUIT TO ARCADE</button>
-      </div>
-    `;
-        this.uiLayer.appendChild(pauseOverlay);
-
-        document.getElementById("btn-resume").onclick = () => {
-            this.togglePause();
-        };
-        document.getElementById("btn-quit").onclick = () => {
-            this.hidePauseMenu();
-            this.showMenu();
-        };
-        document.getElementById("btn-arcade-quit").onclick = () => {
-            this.system.returnToArcade();
-        };
+        this.ui.overlay.showPauseMenu({
+            onResume: () => this.togglePause(),
+            onSettings: () => {
+                this.hidePauseMenu();
+                this.state = "PAUSED_SETTINGS";
+                this._showSettingsScreen();
+            },
+            onQuitMenu: () => {
+                this.hidePauseMenu();
+                this.showMenu();
+            },
+            onQuitArcade: () => this.returnToArcade()
+        });
     }
 
-    showSettings() {
-        this.system.showSettings();
+    /**
+     * Internal method to show settings screen with proper back handling
+     */
+    _showSettingsScreen() {
+        // Use SDK's showSettings with custom back handler
+        this.showSettings({
+            onBack: () => {
+                if (this.state === "PAUSED_SETTINGS") {
+                    this.state = "PAUSED";
+                    // Clear uiLayer before rebuilding HUD and pause menu
+                    this.uiLayer.innerHTML = '';
+                    this.showHUD();
+                    this.showPauseMenu();
+                } else {
+                    this.showMenu();
+                }
+            }
+        });
     }
 
     showHighScores() {
-        // Show cursors for high scores screen
-        this.system.gunManager.setInGame(false);
+        this.setInGame(false);
         const scores = this.highScores.getScores();
-
-        let scoresHTML = '';
-        if (scores.length === 0) {
-            scoresHTML = '<div class="no-scores">No high scores yet! Start playing!</div>';
-        } else {
-            scoresHTML = '<div class="highscore-table">';
-            scores.forEach((score, index) => {
-                const diffBadge = score.difficulty ? score.difficulty.charAt(0).toUpperCase() : '-';
-                const modeBadge = score.gameMode === 'campaign' ? 'C' : 'E';
-                scoresHTML += `
-                    <div class="score-row ${index < 3 ? 'top-three' : ''}">
-                        <span class="rank">${index + 1}</span>
-                        <span class="name" style="flex: 2; text-align: left;">${score.name}</span>
-                        <span class="score">${score.score}</span>
-                        <span class="diff-badge">${diffBadge}</span>
-                        <span class="diff-badge" style="background: #00ccff; margin-left: 5px;">${modeBadge}</span>
-                    </div>
-                `;
-            });
-            scoresHTML += '</div>';
-        }
-
-        this.uiLayer.innerHTML = `
-            <div class="screen">
-                <h1>HIGH SCORES</h1>
-                ${scoresHTML}
-                <div style="margin-top: 1rem; font-size: 0.9rem; opacity: 0.7;">
-                    C = Campaign | E = Endless
-                </div>
-                <button id="btn-back">BACK</button>
-            </div>
-        `;
-
-        document.getElementById("btn-back").onclick = () => this.showMenu();
+        
+        // Use SDK high score display with custom badges for difficulty and mode
+        this.ui.highScores.show({
+            scores,
+            onBack: () => this.showMenu(),
+            badges: [
+                { field: 'difficulty', format: (v) => v ? v.charAt(0).toUpperCase() : '-' },
+                { field: 'gameMode', format: (v) => v === 'campaign' ? 'C' : 'E', color: '#00ccff' }
+            ]
+        });
     }
 
     showRoundIntro(roundNum, callback) {
         this.state = "ROUND_INTRO";
-        this.uiLayer.innerHTML = `
-            <div class="screen intro">
-                <h2>ROUND ${roundNum}</h2>
-                <h1>GET READY</h1>
-                <div class="lives">LIVES: ${this.roundManager.lives}</div>
-            </div>
-        `;
-        setTimeout(() => {
-            this.uiLayer.innerHTML = ''; // Clear intro
-            this.state = "PLAYING"; // Set state to playing
-            // Hide cursors for gameplay (respects user setting)
-            this.system.gunManager.setInGame(true);
-            this.showHUD();
-            callback();
-        }, 2000);
+        this.ui.overlay.showIntro({
+            title: `ROUND ${roundNum}`,
+            subtitle: 'GET READY',
+            info: `LIVES: ${this.roundManager.lives}`,
+            duration: 2000,
+            onComplete: () => {
+                this.state = "PLAYING";
+                this.setInGame(true);
+                this.showHUD();
+                callback();
+            }
+        });
     }
 
     showBonusRoundIntro(callback) {
         this.state = "ROUND_INTRO";
-        this.uiLayer.innerHTML = `
-            <div class="screen intro" style="border-color: #ffd700;">
-                <h2 style="color: #ffd700;">BONUS ROUND</h2>
-                <h1>SHOOT THE CLAY PIGEONS!</h1>
-                <div class="lives">UNLIMITED AMMO</div>
-            </div>
-        `;
-        setTimeout(() => {
-            this.uiLayer.innerHTML = '';
-            this.state = "PLAYING"; // Set state to playing
-            // Hide cursors for gameplay (respects user setting)
-            this.system.gunManager.setInGame(true);
-            this.showHUD();
-            callback();
-        }, 2000);
+        this.ui.overlay.showIntro({
+            title: 'BONUS ROUND',
+            subtitle: 'SHOOT THE CLAY PIGEONS!',
+            info: 'UNLIMITED AMMO',
+            borderColor: '#ffd700',
+            duration: 2000,
+            onComplete: () => {
+                this.state = "PLAYING";
+                this.setInGame(true);
+                this.showHUD();
+                callback();
+            }
+        });
     }
 
     showRoundResult(success, hits, total, callback) {
-        // Show cursors for round result screen
-        this.system.gunManager.setInGame(false);
+        this.setInGame(false);
         this.state = "ROUND_RESULT";
-        const msg = success ? "ROUND CLEAR" : "FAILED";
-        const color = success ? "#00ccff" : "#ff0055";
-
-        this.uiLayer.innerHTML = `
-            <div class="screen result" style="border-color: ${color}">
-                <h1 style="color: ${color}">${msg}</h1>
-                <div class="stats-breakdown">
-                    <div class="stat-row">
-                        <span>HITS:</span>
-                        <span>${hits} / ${total}</span>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        setTimeout(() => {
-            this.uiLayer.innerHTML = '';
-            callback();
-        }, 2000);
+        
+        this.ui.overlay.showResult({
+            success,
+            stats: [
+                { label: 'HITS:', value: `${hits} / ${total}` }
+            ],
+            autoAdvance: 2000,
+            onNext: callback
+        });
     }
 
     showBonusRoundResult(hits, callback) {
-        // Show cursors for bonus result screen
-        this.system.gunManager.setInGame(false);
+        this.setInGame(false);
         this.state = "ROUND_RESULT";
         const bonus = hits * 100;
         this.roundManager.score += bonus;
 
+        // Custom result screen for bonus (SDK overlay doesn't have gold styling)
         this.uiLayer.innerHTML = `
             <div class="screen result" style="border-color: #ffd700;">
                 <h1 style="color: #ffd700;">BONUS COMPLETE</h1>
@@ -380,26 +362,35 @@ export class Game extends BaseGame {
     }
 
     showHUD() {
-        this.uiLayer.innerHTML = `
-            <div style="position: absolute; top: 20px; left: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                SCORE: <span id="score-display">${this.roundManager.score}</span>
-            </div>
-            <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                LIVES: ${this.roundManager.lives}
-            </div>
-            <div style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 20px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                ROUND ${this.roundManager.currentRound}
-            </div>
-            <div style="position: absolute; bottom: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                AMMO: <span id="ammo-display">III</span>
-            </div>
-        `;
+        if (this.isMultiplayer()) {
+            // Use multiplayer HUD
+            this.showMultiplayerHUD({
+                round: `ROUND ${this.roundManager.currentRound}`,
+                ammo: 3
+            });
+        } else {
+            // Single player HUD
+            this.ui.hud.create({
+                score: this.roundManager.score,
+                lives: this.roundManager.lives,
+                round: `ROUND ${this.roundManager.currentRound}`,
+                ammo: 3
+            });
+        }
     }
 
     updateAmmoDisplay(shots) {
-        const ammoEl = document.getElementById('ammo-display');
-        if (ammoEl) {
-            ammoEl.textContent = 'I'.repeat(Math.max(0, shots));
+        this.ui.hud.updateAmmo(shots);
+    }
+
+    updateScoreDisplay() {
+        if (this.isMultiplayer()) {
+            // Update all player HUDs
+            this.players.players.forEach((player, index) => {
+                this.updatePlayerHUD(index);
+            });
+        } else {
+            this.ui.hud.update('score', this.roundManager.score);
         }
     }
 
@@ -453,66 +444,52 @@ export class Game extends BaseGame {
     }
 
     handleGameOver(cleared) {
-        const finalScore = this.roundManager.score;
-        const difficulty = this.roundManager.difficulty;
-
-        // Check local high score
-        if (this.highScores.isHighScore(finalScore)) {
-            this.showNameEntry(finalScore, cleared);
+        if (this.isMultiplayer()) {
+            // Show multiplayer results
+            this.showMultiplayerResults({
+                cleared,
+                onRetry: () => {
+                    this.players.resetGame(3);
+                    this.startGame(this.roundManager.gameMode);
+                },
+                onMenu: () => this.showMenu()
+            });
         } else {
-            this.showGameOverScreen(finalScore, cleared);
+            // Single player - check high score
+            const finalScore = this.roundManager.score;
+            
+            if (this.highScores.isHighScore(finalScore)) {
+                this.showNameEntry(finalScore, cleared);
+            } else {
+                this.showGameOverScreen(finalScore, cleared);
+            }
         }
     }
 
     showNameEntry(finalScore, cleared) {
-        // Show cursors for name entry screen
-        this.system.gunManager.setInGame(false);
-        this.uiLayer.innerHTML = `
-            <div class="screen">
-                <h1>NEW HIGH SCORE!</h1>
-                <h2>SCORE: ${finalScore}</h2>
-                <div class="name-entry">
-                    <label>ENTER YOUR NAME:</label>
-                    <input type="text" id="player-name" maxlength="10" value="${this.system.auth.getCurrentUser().name}" autocomplete="off">
-                </div>
-                <button id="btn-submit">SUBMIT</button>
-            </div>
-        `;
-
-        const nameInput = document.getElementById("player-name");
-        nameInput.focus();
-        nameInput.select();
-
-        const submitScore = () => {
-            const name = nameInput.value.trim() || "PLAYER";
-            // Save to local game scores
-            this.highScores.addScore(name, finalScore, this.roundManager.difficulty, this.roundManager.gameMode);
-            // Save to global system scores
-            this.system.globalHighScores.addScore('not-duck-hunt', name, finalScore, this.roundManager.difficulty);
-
-            this.showGameOverScreen(finalScore, cleared);
-        };
-
-        document.getElementById("btn-submit").onclick = submitScore;
-        nameInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") submitScore();
+        this.setInGame(false);
+        
+        this.ui.overlay.showNameEntry({
+            score: finalScore,
+            defaultName: this.getCurrentUser().name,
+            onSubmit: (name) => {
+                // Save to local game scores
+                this.highScores.addScore(name, finalScore, this.roundManager.difficulty, this.roundManager.gameMode);
+                // Save to global system scores
+                this.saveGlobalScore(name, finalScore, this.roundManager.difficulty);
+                this.showGameOverScreen(finalScore, cleared);
+            }
         });
     }
 
     showGameOverScreen(finalScore, cleared) {
-        // Show cursors for game over screen
-        this.system.gunManager.setInGame(false);
-        const title = cleared ? "ALL ROUNDS CLEARED!" : "GAME OVER";
-        this.uiLayer.innerHTML = `
-            <div class="screen">
-                <h1>${title}</h1>
-                <h2>SCORE: ${finalScore}</h2>
-                <button id="btn-retry">RETRY</button>
-                <button id="btn-menu">MENU</button>
-            </div>
-        `;
-
-        document.getElementById("btn-retry").onclick = () => this.startGame(this.roundManager.gameMode);
-        document.getElementById("btn-menu").onclick = () => this.showMenu();
+        this.setInGame(false);
+        
+        this.ui.overlay.showGameOver({
+            cleared,
+            score: finalScore,
+            onRetry: () => this.startGame(this.roundManager.gameMode),
+            onMenu: () => this.showMenu()
+        });
     }
 }

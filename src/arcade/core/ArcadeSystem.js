@@ -1,9 +1,11 @@
 import { Settings } from '../../shared/Settings.js';
+import { SoundManager } from '../../shared/SoundManager.js';
 import { GlobalHighScores } from '../GlobalHighScores.js';
 import { GameRegistry } from './GameRegistry.js';
 import { AuthService } from '../services/AuthService.js';
 import { GunManager } from './GunManager.js';
 import { GunSetupMenu } from '../ui/GunSetupMenu.js';
+import { SettingsScreen } from '../sdk/SettingsScreen.js';
 
 export class ArcadeSystem {
     constructor(canvas, uiLayer) {
@@ -12,6 +14,7 @@ export class ArcadeSystem {
         this.ctx = canvas.getContext('2d');
 
         this.settings = new Settings();
+        this.soundManager = new SoundManager(); // Shared SoundManager for all games
         this.globalHighScores = new GlobalHighScores();
         this.registry = new GameRegistry();
         this.auth = new AuthService();
@@ -23,8 +26,10 @@ export class ArcadeSystem {
         this.currentGame = null;
         this.state = 'ARCADE_MENU'; // ARCADE_MENU, PLAYING_GAME, HIGH_SCORES, SETTINGS, PROFILE
 
-        this.resize();
-        window.addEventListener('resize', () => this.resize());
+        // Centralized resize handling
+        this._handleResize = this._handleResize.bind(this);
+        this._handleResize();
+        window.addEventListener('resize', this._handleResize);
     }
 
     async init() {
@@ -43,9 +48,28 @@ export class ArcadeSystem {
         this.gunManager.setInGame(false);
     }
 
+    /**
+     * Internal resize handler - routes to game if active.
+     */
+    _handleResize() {
+        const width = window.innerWidth;
+        const height = window.innerHeight;
+
+        // Always update canvas size
+        this.canvas.width = width;
+        this.canvas.height = height;
+
+        // Notify current game if one is running
+        if (this.currentGame && typeof this.currentGame.onResize === 'function') {
+            this.currentGame.onResize(width, height);
+        }
+    }
+
+    /**
+     * @deprecated Use _handleResize internally. Games should use onResize() hook.
+     */
     resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
+        this._handleResize();
     }
 
     /**
@@ -139,7 +163,12 @@ export class ArcadeSystem {
 
     returnToArcade() {
         if (this.currentGame) {
-            this.currentGame.destroy(); // Clean up
+            // Use SDK cleanup which calls destroy() internally
+            if (typeof this.currentGame._cleanup === 'function') {
+                this.currentGame._cleanup();
+            } else {
+                this.currentGame.destroy();
+            }
             this.currentGame = null;
         }
         
@@ -235,63 +264,17 @@ export class ArcadeSystem {
 
     showSettings() {
         this.state = 'SETTINGS';
-
-        this.uiLayer.innerHTML = `
-            <div class="screen">
-                <h2>SETTINGS</h2>
-                
-                <div class="setting-row">
-                    <label>Fullscreen:</label>
-                    <input type="checkbox" id="fullscreen-check" ${this.settings.isFullscreen ? 'checked' : ''}>
-                </div>
-
-                <div id="sinden-options">
-                    <div class="setting-row">
-                        <label>Sinden Border:</label>
-                        <input type="checkbox" id="sinden-check" ${this.settings.sindenEnabled ? 'checked' : ''}>
-                    </div>
-                    <div class="setting-row ${this.settings.sindenEnabled ? '' : 'hidden'}" id="sinden-thickness-row">
-                        <label>Border Thickness:</label>
-                        <input type="range" id="sinden-thick" min="1" max="50" value="${this.settings.sindenThickness}">
-                    </div>
-                    <div class="setting-row ${this.settings.sindenEnabled ? '' : 'hidden'}" id="sinden-color-row">
-                        <label>Border Color:</label>
-                        <input type="color" id="sinden-color" value="${this.settings.sindenColor}">
-                    </div>
-                </div>
-                
-                <button id="btn-gun-setup" class="btn-primary" style="margin-top: 1rem;">GUN SETUP</button>
-                <button id="btn-back-arcade">BACK</button>
-            </div>
-        `;
-
-        const fullscreenCheck = document.getElementById("fullscreen-check");
-        const sindenCheck = document.getElementById("sinden-check");
-        const sindenThick = document.getElementById("sinden-thick");
-        const sindenColor = document.getElementById("sinden-color");
-        const sindenThicknessRow = document.getElementById("sinden-thickness-row");
-        const sindenColorRow = document.getElementById("sinden-color-row");
-
-        fullscreenCheck.onchange = (e) => this.settings.setFullscreen(e.target.checked);
         
-        sindenCheck.onchange = (e) => {
-            this.settings.setSindenEnabled(e.target.checked);
-            if (e.target.checked) {
-                sindenThicknessRow.classList.remove('hidden');
-                sindenColorRow.classList.remove('hidden');
-            } else {
-                sindenThicknessRow.classList.add('hidden');
-                sindenColorRow.classList.add('hidden');
-            }
-        };
-        sindenThick.oninput = (e) => this.settings.setSindenThickness(e.target.value);
-        sindenColor.oninput = (e) => this.settings.setSindenColor(e.target.value);
-
-        document.getElementById("btn-gun-setup").onclick = () => {
-            // Pass callback to return to settings after gun setup
-            this.showGunSetup(() => this.showSettings());
-        };
-        document.getElementById("btn-back-arcade").onclick = () => this.showArcadeMenu();
+        // Use SDK SettingsScreen component
+        const settingsScreen = new SettingsScreen(this.uiLayer, this.settings, {
+            onBack: () => this.showArcadeMenu(),
+            onGunSetup: () => {
+                this.showGunSetup(() => this.showSettings());
+            },
+            showGunSetup: true
+        });
+        
+        settingsScreen.show();
     }
 
     showGunSetup(returnCallback = null) {

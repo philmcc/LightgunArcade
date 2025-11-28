@@ -206,10 +206,10 @@ export class RoundManager {
         }
     }
 
-    handleShoot(x, y) {
+    handleShoot(x, y, playerIndex = 0) {
         if (this.isBonusRound) {
             // Unlimited shots in bonus round
-            this.checkHits(x, y);
+            this.checkHits(x, y, playerIndex);
             return;
         }
 
@@ -220,10 +220,14 @@ export class RoundManager {
         this.shotsRemaining--;
         this.game.updateAmmoDisplay(this.shotsRemaining);
 
-        const hitResult = this.checkHits(x, y);
+        const hitResult = this.checkHits(x, y, playerIndex);
 
         if (!hitResult.hit) {
             this.game.sound.playShoot(); // Miss sound
+            // Record miss for player in multiplayer
+            if (this.game.isMultiplayer()) {
+                this.game.players.recordMiss(playerIndex);
+            }
         }
 
         // Check if all shots used
@@ -241,7 +245,7 @@ export class RoundManager {
         }
     }
 
-    checkHits(x, y) {
+    checkHits(x, y, playerIndex = 0) {
         let anyHit = false;
 
         for (let i = this.activeTargets.length - 1; i >= 0; i--) {
@@ -255,6 +259,11 @@ export class RoundManager {
                 anyHit = true;
                 this.score += result.points;
                 this.targetsHit++;
+
+                // Record hit for player in multiplayer
+                if (this.game.isMultiplayer()) {
+                    this.game.players.recordHit(playerIndex, result.points);
+                }
 
                 // Play hit sound
                 this.game.sound.playHit();

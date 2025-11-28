@@ -16,6 +16,7 @@ export class GunCursorManager {
         // Context tracking - cursors always show in menus, setting only affects gameplay
         this.inGame = false;
         this.showCursorsInGame = true; // User setting for in-game cursor visibility
+        
     }
 
     /**
@@ -40,6 +41,7 @@ export class GunCursorManager {
         this.gunManager.guns.forEach((gun, index) => {
             this.createCursor(index);
         });
+        
     }
 
     /**
@@ -263,6 +265,37 @@ export class GunCursorManager {
             
             // Visual feedback
             this.showClickEffect(x, y, gun.color);
+            
+            // For fullscreen button, handle it directly here
+            // We can't use synthetic events for fullscreen API, but we CAN toggle it
+            // if we're already in fullscreen (exiting doesn't require trusted gesture)
+            // For entering fullscreen, we show a prompt to use mouse/keyboard
+            if (target.id === 'btn-fullscreen') {
+                if (document.fullscreenElement) {
+                    // Exiting fullscreen works with any event
+                    document.exitFullscreen().then(() => {
+                        target.classList.remove('active');
+                        target.textContent = 'OFF';
+                    }).catch(err => {
+                        console.warn('Exit fullscreen failed:', err);
+                    });
+                } else {
+                    // Entering fullscreen requires trusted gesture - try anyway
+                    // Some browsers may allow it, others won't
+                    document.documentElement.requestFullscreen().then(() => {
+                        target.classList.add('active');
+                        target.textContent = 'ON';
+                    }).catch(err => {
+                        console.warn('Fullscreen requires mouse/keyboard click:', err);
+                        // Flash the button to indicate it didn't work
+                        target.style.background = '#ff4444';
+                        setTimeout(() => {
+                            target.style.background = '';
+                        }, 200);
+                    });
+                }
+                return true;
+            }
             
             // Dispatch a proper mouse event for better compatibility
             const clickEvent = new MouseEvent('click', {

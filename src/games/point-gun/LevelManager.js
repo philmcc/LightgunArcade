@@ -48,8 +48,8 @@ export class LevelManager {
         this.game.showStageIntro(this.currentStage, this.currentGame.objective, () => {
             this.currentGame.start();
             this.game.state = "PLAYING";
-            // Hide cursors for gameplay (respects user setting)
-            this.game.system.gunManager.setInGame(true);
+            // Hide cursors for gameplay (SDK method)
+            this.game.setInGame(true);
         });
     }
 
@@ -94,9 +94,9 @@ export class LevelManager {
         }
     }
 
-    handleInput(x, y) {
+    handleInput(x, y, playerIndex = 0) {
         if (this.currentGame && this.game.state === "PLAYING") {
-            this.currentGame.handleInput(x, y);
+            this.currentGame.handleInput(x, y, playerIndex);
         }
     }
 }
