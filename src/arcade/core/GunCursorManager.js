@@ -113,20 +113,19 @@ export class GunCursorManager {
         
         // Determine if cursor should be visible:
         // - Gun must be connected
-        // - Not forced hidden (single player mode) - check both Set and DOM attribute
-        // - In menus (not in game): always show cursor
-        // - In game: check per-gun showCursor setting
+        // - In menus (not in game): always show cursor (ignore forced hidden)
+        // - In game: check per-gun showCursor setting AND forced hidden state
         const isConnected = gun && gun.state.isConnected;
         const gunCursorEnabled = gun?.config?.showCursor !== false; // Default to true
         const forcedHidden = this.forcedHiddenGuns.has(gunIndex) || cursor.dataset.forcedHidden === 'true';
         
         let shouldShow = false;
-        if (isConnected && !forcedHidden) {
+        if (isConnected) {
             if (this.inGame) {
-                // In game: respect per-gun setting
-                shouldShow = gunCursorEnabled;
+                // In game: respect per-gun setting AND forced hidden (single player)
+                shouldShow = gunCursorEnabled && !forcedHidden;
             } else {
-                // In menus: always show
+                // In menus: always show (ignore forced hidden)
                 shouldShow = true;
             }
         }
@@ -174,12 +173,12 @@ export class GunCursorManager {
             const forcedHidden = this.forcedHiddenGuns.has(gunIndex) || cursor.dataset.forcedHidden === 'true';
             
             let shouldShow = false;
-            if (isConnected && !forcedHidden) {
+            if (isConnected) {
                 if (this.inGame) {
-                    // In game: respect per-gun setting
-                    shouldShow = gunCursorEnabled;
+                    // In game: respect per-gun setting AND forced hidden (single player)
+                    shouldShow = gunCursorEnabled && !forcedHidden;
                 } else {
-                    // In menus: always show
+                    // In menus: always show (ignore forced hidden)
                     shouldShow = true;
                 }
             }
