@@ -39,3 +39,7 @@ export { GameHighScores } from '../services/GameHighScores.js';
 export { InputManager } from '../../shared/InputManager.js';
 export { SoundManager } from '../../shared/SoundManager.js';
 export { Settings } from '../../shared/Settings.js';
+
+// Game Systems
+export { ComboSystem } from './ComboSystem.js';
+export { FloatingScoreManager, ComboDisplay } from './FloatingScoreManager.js';

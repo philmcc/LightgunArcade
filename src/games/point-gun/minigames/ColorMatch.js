@@ -16,29 +16,30 @@ export class ColorMatch extends MiniGame {
         this.timeLimit = 20;
         this.targets = [];
 
+        // Difficulty scaling - time-based rounds with quota to pass
         if (difficulty === 'beginner') {
-            this.targetQuota = 5;
-            this.spawnRate = 700;
-            this.speed = 150;
-            this.colorsInPlay = 2;
-            this.timeLimit = 20;
-            this.minLifetime = 2.0;
-            this.maxLifetimeRange = 2.0;
-        } else if (difficulty === 'medium') {
-            this.targetQuota = 8;
-            this.spawnRate = 500;
-            this.speed = 300;
-            this.colorsInPlay = 3;
-            this.timeLimit = 20;
-            this.minLifetime = 1.5;
+            this.targetQuota = 6;       // Need 6 correct colors to pass
+            this.timeLimit = 25;        // 25 seconds
+            this.spawnRate = 600;       // Spawn rate
+            this.speed = 120;           // Slow movement
+            this.colorsInPlay = 2;      // Only 2 colors (easier to identify)
+            this.minLifetime = 2.5;
             this.maxLifetimeRange = 1.5;
+        } else if (difficulty === 'medium') {
+            this.targetQuota = 10;      // Need 10 to pass
+            this.timeLimit = 25;
+            this.spawnRate = 450;
+            this.speed = 200;
+            this.colorsInPlay = 3;      // 3 colors
+            this.minLifetime = 2.0;
+            this.maxLifetimeRange = 1.0;
         } else {
-            this.targetQuota = 12;
-            this.spawnRate = 400;
-            this.speed = 550;
-            this.colorsInPlay = 4;
-            this.timeLimit = 20;
-            this.minLifetime = 1.0;
+            this.targetQuota = 14;      // Need 14 to pass
+            this.timeLimit = 25;
+            this.spawnRate = 350;
+            this.speed = 300;
+            this.colorsInPlay = 4;      // All 4 colors
+            this.minLifetime = 1.5;
             this.maxLifetimeRange = 1.0;
         }
 
@@ -48,7 +49,6 @@ export class ColorMatch extends MiniGame {
             this.availableColors[this.colorsInPlay - 1] = this.targetColor;
         }
 
-        this.targetsShot = 0;
         this.lastSpawn = 0;
         this.lastTickTime = 0;
         this.isCountingDown = true;
@@ -117,7 +117,8 @@ export class ColorMatch extends MiniGame {
     start() {
         super.start();
         this.targets = [];
-        this.targetsShot = 0;
+        this.targetsHit = 0;
+        this.quotaReached = false;
         this.spawnTarget();
     }
 
@@ -177,8 +178,8 @@ export class ColorMatch extends MiniGame {
             }
         }
 
-        if (this.timeLimit <= 0) {
-            this.fail();
+        // Check time - round ends when time is up
+        if (!this.checkTimeAndContinue()) {
             return;
         }
 
@@ -498,7 +499,13 @@ export class ColorMatch extends MiniGame {
         ctx.shadowColor = "rgba(0,0,0,0.5)";
         ctx.shadowBlur = 4;
 
-        const text = `SHOOT ${this.targetColor.name}: ${this.targetsShot} / ${this.targetQuota}`;
+        let text;
+        if (this.quotaReached) {
+            text = `SHOOT ${this.targetColor.name}: ${this.targetsHit} ✓ BONUS TIME!`;
+            ctx.fillStyle = "#00ff00";
+        } else {
+            text = `SHOOT ${this.targetColor.name}: ${this.targetsHit} / ${this.targetQuota}`;
+        }
         ctx.strokeText(text, this.game.canvas.width / 2, 50);
         ctx.fillText(text, this.game.canvas.width / 2, 50);
         ctx.shadowBlur = 0;
@@ -515,8 +522,8 @@ export class ColorMatch extends MiniGame {
         ctx.fill();
     }
 
-    handleInput(x, y) {
-        super.handleInput(x, y);
+    handleInput(x, y, playerIndex = 0) {
+        super.handleInput(x, y, playerIndex);
 
         // Don't allow shooting during countdown
         if (this.isCountingDown) {
@@ -539,28 +546,30 @@ export class ColorMatch extends MiniGame {
                     const accuracyFactor = 1 - (dist / t.size) * 0.5;
                     const points = Math.ceil(200 * accuracyFactor);
 
-                    this.recordHit(points, accuracyFactor);
-                    this.targetsShot++;
+                    this.recordHit(points, accuracyFactor, playerIndex, t.x, t.y);
+                    this.incrementTargetsHit();
 
                     // Spawn explosion
                     this.spawnExplosion(t.x, t.y, t.colorObj.hex);
 
                     this.targets.splice(i, 1);
-
-                    if (this.targetsShot >= this.targetQuota) {
-                        this.complete();
-                    } else {
-                        this.spawnTarget();
-                    }
+                    
+                    // Always spawn a new target - round continues until time runs out
+                    this.spawnTarget();
                 } else {
-                    // Wrong color!
-                    // Maybe play error sound?
-                    this.game.sound.playGameOver(); // Reuse for now
-                    this.fail();
+                    // Wrong color! Penalty but continue playing
+                    this.spawnExplosion(t.x, t.y, "#ff0000"); // Red explosion for wrong
+                    this.targets.splice(i, 1);
+                    this.spawnTarget();
+                    
+                    // Apply penalty - lose a life but continue (unless out of lives)
+                    this.applyPenalty(playerIndex);
                 }
                 return;
             }
         }
+        // Miss - didn't hit any target
+        this.recordMiss(playerIndex);
     }
 
     drawTree(ctx, x, y, scale, type) {

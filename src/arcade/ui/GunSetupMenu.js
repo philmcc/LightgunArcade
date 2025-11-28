@@ -14,6 +14,67 @@ export class GunSetupMenu {
         this.mappingCancel = null;
         this.availableHIDDevices = [];
     }
+    
+    /**
+     * Show an in-app toast notification (replaces browser alert)
+     * @param {string} message - Message to display
+     * @param {number} duration - Duration in ms (default 3000)
+     */
+    showToast(message, duration = 3000) {
+        // Remove any existing toast
+        const existing = document.querySelector('.gun-setup-toast');
+        if (existing) existing.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'gun-setup-toast';
+        toast.innerHTML = `<div class="toast-content">${message.replace(/\n/g, '<br>')}</div>`;
+        toast.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 3px solid #00ccff;
+            border-radius: 10px;
+            padding: 20px 40px;
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            z-index: 10000;
+            animation: toastFadeIn 0.2s ease-out;
+        `;
+        
+        // Add animation keyframes if not already present
+        if (!document.querySelector('#toast-styles')) {
+            const style = document.createElement('style');
+            style.id = 'toast-styles';
+            style.textContent = `
+                @keyframes toastFadeIn {
+                    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                }
+                @keyframes toastFadeOut {
+                    from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                    to { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        document.body.appendChild(toast);
+        
+        // Auto-remove after duration
+        setTimeout(() => {
+            toast.style.animation = 'toastFadeOut 0.2s ease-in forwards';
+            setTimeout(() => toast.remove(), 200);
+        }, duration);
+        
+        // Also allow clicking to dismiss
+        toast.onclick = () => {
+            toast.style.animation = 'toastFadeOut 0.2s ease-in forwards';
+            setTimeout(() => toast.remove(), 200);
+        };
+    }
 
     /**
      * Render the menu into the UI layer
@@ -115,9 +176,8 @@ export class GunSetupMenu {
             <p><strong>WebHID Supported!</strong> Click "ADD LIGHTGUNS" to select your Gun4IR devices.</p>
             <p>Each gun will be detected as a separate device.</p>
           ` : `
-            <p>Click "DETECT GUNS" and then pull the trigger on each gun to assign it.</p>
-            <p class="warning">⚠️ Note: On Windows, multiple mice/guns may share the same pointer. 
-               For multi-gun support, use Chrome/Edge with Gun4IR devices.</p>
+            <p class="warning">⚠️ For lightgun support, please use Chrome or Edge browser.</p>
+            <p>Mouse input works automatically without configuration.</p>
           `}
         </div>
 
@@ -131,23 +191,9 @@ export class GunSetupMenu {
           ${webHIDSupported ? `
             <button id="btn-add-hid-devices" class="primary">ADD LIGHTGUNS</button>
           ` : ''}
-          <button id="btn-detect-guns" class="${this.gunManager.isDetecting ? 'active' : ''}">
-            ${this.gunManager.isDetecting ? 'STOP DETECTION' : 'DETECT (POINTER)'}
-          </button>
           <button id="btn-reset-guns" class="danger">RESET ALL</button>
           <button id="btn-back-arcade">BACK</button>
         </div>
-        
-        ${this.gunManager.isDetecting ? `
-          <div class="detection-overlay">
-            <div class="detection-message">
-              <h2>LISTENING FOR INPUT...</h2>
-              <p>Pull the trigger on a gun to assign it to the next available slot.</p>
-              <p class="hint">Note: If using multiple Gun4IR devices, use "ADD LIGHTGUNS" instead.</p>
-              <button id="btn-stop-detection">CANCEL</button>
-            </div>
-          </div>
-        ` : ''}
       </div>
     `;
     }
@@ -166,18 +212,6 @@ export class GunSetupMenu {
         const addHIDBtn = document.getElementById('btn-add-hid-devices');
         if (addHIDBtn) {
             addHIDBtn.onclick = () => this.addHIDDevices();
-        }
-
-        // Detect toggle (pointer-based fallback)
-        const detectBtn = document.getElementById('btn-detect-guns');
-        if (detectBtn) {
-            detectBtn.onclick = () => this.toggleDetection();
-        }
-
-        // Stop detection overlay button
-        const stopDetectBtn = document.getElementById('btn-stop-detection');
-        if (stopDetectBtn) {
-            stopDetectBtn.onclick = () => this.toggleDetection();
         }
 
         // Reset button
@@ -271,7 +305,7 @@ export class GunSetupMenu {
             
         } catch (error) {
             console.error('Error adding HID devices:', error);
-            alert('Failed to add devices. Make sure you are using Chrome or Edge browser.');
+            this.showToast('Failed to add devices.\nMake sure you are using Chrome or Edge browser.');
         }
     }
 
@@ -307,7 +341,7 @@ export class GunSetupMenu {
     startCalibration(gunIndex) {
         const gun = this.gunManager.guns[gunIndex];
         if (!gun || !gun.config.hidDeviceId) {
-            alert('Please assign a lightgun device first before calibrating.');
+            this.showToast('Please assign a lightgun device first before calibrating.');
             return;
         }
 
@@ -315,7 +349,7 @@ export class GunSetupMenu {
             gunIndex,
             (result) => {
                 // Calibration complete
-                alert(`Calibration complete for ${gun.name}!\n\nThe cursor should now track accurately.`);
+                this.showToast(`Calibration complete for ${gun.name}!\n\nThe cursor should now track accurately.`);
                 this.render();
                 this.attachListeners();
             },
@@ -337,9 +371,9 @@ export class GunSetupMenu {
             // No HID devices available, prompt to add or use pointer detection
             const webHIDSupported = this.gunManager.shouldUseWebHID();
             if (webHIDSupported) {
-                alert('No unassigned lightguns available.\n\nClick "ADD LIGHTGUNS" to select your Gun4IR devices first.');
+                this.showToast('No unassigned lightguns available.\n\nClick "ADD LIGHTGUNS" to select your Gun4IR devices first.');
             } else {
-                alert('No devices available.\n\nUse "DETECT (POINTER)" to assign using trigger pull.');
+                this.showToast('No devices available.\n\nUse "DETECT (POINTER)" to assign using trigger pull.');
             }
             return;
         }
@@ -385,22 +419,6 @@ export class GunSetupMenu {
     }
 
     /**
-     * Toggle detection mode
-     */
-    toggleDetection() {
-        if (this.gunManager.isDetecting) {
-            this.gunManager.stopDetection();
-        } else {
-            this.gunManager.startDetection((assignedGun) => {
-                this.render();
-                this.attachListeners();
-            });
-        }
-        this.render();
-        this.attachListeners();
-    }
-
-    /**
      * Start button mapping flow for a gun
      * @param {number} gunIndex 
      */
@@ -427,7 +445,7 @@ export class GunSetupMenu {
             await this.gunManager.saveProfiles();
             this.render();
             this.attachListeners();
-            alert(`Buttons mapped for ${gun.name}!`);
+            this.showToast(`Buttons mapped for ${gun.name}!`);
 
         } catch (e) {
             console.log('Mapping cancelled');

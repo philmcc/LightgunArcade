@@ -1,3 +1,5 @@
+import { PlayerManager } from '../../arcade/core/PlayerManager.js';
+
 export class MiniGame {
     constructor(game, difficulty) {
         this.game = game;
@@ -6,6 +8,11 @@ export class MiniGame {
         this.timeLimit = 30;
         this.isComplete = false;
         this.isFailed = false;
+        
+        // Time-based round system
+        this.targetQuota = 10;      // Number of targets needed to pass
+        this.targetsHit = 0;        // Current targets hit
+        this.quotaReached = false;  // True when quota is met (but round continues)
 
         // Stats tracking
         this.stats = {
@@ -17,6 +24,12 @@ export class MiniGame {
             baseScore: 0,
             totalAccuracyFactor: 0 // Sum of (1.0 = center, 0.5 = edge)
         };
+        
+        // Per-player stats for multiplayer
+        this.playerStats = [
+            { shots: 0, hits: 0, misses: 0, score: 0 },
+            { shots: 0, hits: 0, misses: 0, score: 0 }
+        ];
 
         // Score multiplier based on difficulty
         if (difficulty === 'beginner') {
@@ -36,8 +49,20 @@ export class MiniGame {
     }
 
     loadBackground(imagePath) {
-        this.backgroundImage = new Image();
-        this.backgroundImage.src = imagePath;
+        // Use SDK AssetLoader if available, otherwise fall back to direct loading
+        if (this.game.assets) {
+            this.game.assets.loadImage(imagePath).then(img => {
+                this.backgroundImage = img;
+            }).catch(err => {
+                console.warn('Failed to load background via AssetLoader:', err);
+                // Fallback to direct loading
+                this.backgroundImage = new Image();
+                this.backgroundImage.src = imagePath;
+            });
+        } else {
+            this.backgroundImage = new Image();
+            this.backgroundImage.src = imagePath;
+        }
     }
 
     drawBackground(ctx) {
@@ -154,11 +179,26 @@ export class MiniGame {
         });
     }
 
-    handleInput(x, y) {
+    handleInput(x, y, playerIndex = 0) {
         // Handle shots
         this.stats.shots++;
-        // Fixed shot color (Blue) - Red reserved for Player 2
-        const color = '#00ccff';
+        
+        // Track per-player stats
+        if (this.playerStats[playerIndex]) {
+            this.playerStats[playerIndex].shots++;
+        }
+        
+        // Get player color for shot indicator (use SDK PlayerManager colors)
+        const isMultiplayer = this.game.isMultiplayer && this.game.isMultiplayer();
+        let color = '#00ccff'; // Default blue for single player
+        
+        if (isMultiplayer) {
+            const playerColors = PlayerManager.PLAYER_COLORS[playerIndex];
+            if (playerColors) {
+                color = playerColors.secondary; // Use secondary color for shots
+            }
+        }
+        
         this.spawnShotIndicator(x, y, color);
     }
 
@@ -196,17 +236,84 @@ export class MiniGame {
         });
     }
 
-    recordHit(points = 100, accuracyFactor = 1.0) {
+    recordHit(points = 100, accuracyFactor = 1.0, playerIndex = 0, x = 0, y = 0) {
         this.stats.hits++;
         this.stats.totalAccuracyFactor += accuracyFactor;
-
-        const multipliedPoints = Math.floor(points * this.scoreMultiplier);
+        
+        // Track per-player stats
+        if (this.playerStats[playerIndex]) {
+            this.playerStats[playerIndex].hits++;
+        }
+        
+        // Apply combo multiplier from game
+        const comboMultiplier = this.game.getComboMultiplier ? this.game.getComboMultiplier() : 1;
+        const multipliedPoints = Math.floor(points * this.scoreMultiplier * comboMultiplier);
+        
         this.stats.baseScore += multipliedPoints;
         this.game.levelManager.score += multipliedPoints;
+        
+        // Track per-player score
+        if (this.playerStats[playerIndex]) {
+            this.playerStats[playerIndex].score += multipliedPoints;
+        }
+        
+        // Increment combo
+        if (this.game.incrementCombo) {
+            this.game.incrementCombo();
+        }
+        
+        // Record hit for multiplayer
+        if (this.game.isMultiplayer && this.game.isMultiplayer()) {
+            this.game.players.recordHit(playerIndex, multipliedPoints);
+        }
+        
+        // Update HUD score display
+        if (this.game.updateScoreDisplay) {
+            this.game.updateScoreDisplay();
+        }
+        
+        // Spawn floating score
+        if (this.game.spawnFloatingScore) {
+            const isMultiplayer = this.game.isMultiplayer && this.game.isMultiplayer();
+            const playerColors = PlayerManager.PLAYER_COLORS[playerIndex];
+            const playerColor = isMultiplayer && playerColors 
+                ? playerColors.primary 
+                : null;
+            
+            // Build bonus text based on accuracy
+            let bonusText = '';
+            if (accuracyFactor >= 0.9) {
+                bonusText = 'PERFECT!';
+            } else if (accuracyFactor >= 0.7) {
+                bonusText = 'GREAT!';
+            }
+            
+            this.game.spawnFloatingScore(x, y, {
+                points: multipliedPoints,
+                bonusText,
+                playerIndex: isMultiplayer ? playerIndex : null,
+                playerColor
+            });
+        }
     }
 
-    recordMiss() {
+    recordMiss(playerIndex = 0) {
         this.stats.misses++;
+        
+        // Track per-player stats
+        if (this.playerStats[playerIndex]) {
+            this.playerStats[playerIndex].misses++;
+        }
+        
+        // Break combo
+        if (this.game.breakCombo) {
+            this.game.breakCombo();
+        }
+        
+        // Record miss for multiplayer
+        if (this.game.isMultiplayer && this.game.isMultiplayer()) {
+            this.game.players.recordMiss(playerIndex);
+        }
     }
 
     complete() {
@@ -217,6 +324,80 @@ export class MiniGame {
     fail() {
         this.stats.endTime = Date.now();
         this.isFailed = true;
+    }
+    
+    /**
+     * Called when time runs out - check if quota was met
+     */
+    onTimeUp() {
+        if (this.targetsHit >= this.targetQuota) {
+            this.complete();
+        } else {
+            this.fail();
+        }
+    }
+    
+    /**
+     * Apply a penalty (e.g., hitting wrong target/bomb) - lose a life but continue
+     * @param {number} playerIndex - Player who caused the penalty
+     * @returns {boolean} - True if game should continue, false if out of lives
+     */
+    applyPenalty(playerIndex = 0) {
+        // Deduct a life from LevelManager
+        this.game.levelManager.lives--;
+        
+        // Record as a miss
+        this.recordMiss(playerIndex);
+        
+        // Break combo
+        if (this.game.breakCombo) {
+            this.game.breakCombo();
+        }
+        
+        // Play penalty sound
+        if (this.game.sound && this.game.sound.playGameOver) {
+            this.game.sound.playGameOver();
+        }
+        
+        // Update HUD to show life loss
+        if (this.game.updateHUD) {
+            this.game.updateHUD();
+        }
+        
+        // Check if out of lives - if so, fail the round
+        if (this.game.levelManager.lives <= 0) {
+            this.fail();
+            return false;
+        }
+        
+        return true; // Continue playing
+    }
+    
+    /**
+     * Increment targets hit and check for quota
+     * Call this instead of directly incrementing targetsHit
+     */
+    incrementTargetsHit() {
+        this.targetsHit++;
+        if (this.targetsHit >= this.targetQuota && !this.quotaReached) {
+            this.quotaReached = true;
+            // Play a success sound to indicate quota reached
+            if (this.game.sound && this.game.sound.playSuccess) {
+                this.game.sound.playSuccess();
+            }
+        }
+    }
+    
+    /**
+     * Check if the round should end (time up)
+     * Returns true if round should continue
+     */
+    checkTimeAndContinue() {
+        if (this.timeLimit <= 0) {
+            this.onTimeUp();
+            return false;
+        }
+        return true;
     }
 
     getAccuracy() {
@@ -236,7 +417,6 @@ export class MiniGame {
     calculateBonuses() {
         const accuracy = this.getAccuracy();
         const pinpointAccuracy = this.getPinpointAccuracy();
-        const time = this.getCompletionTime();
 
         // Accuracy bonus: up to 1000 points for perfect hit/miss ratio
         const accuracyBonus = Math.floor((accuracy / 100) * 1000 * this.scoreMultiplier);
@@ -244,14 +424,16 @@ export class MiniGame {
         // Pinpoint bonus: up to 1000 points for perfect center shots
         const pinpointBonus = Math.floor((pinpointAccuracy / 100) * 1000 * this.scoreMultiplier);
 
-        // Speed bonus: based on time remaining (this.timeLimit is the remaining time)
-        const timeBonus = Math.max(0, Math.floor(this.timeLimit) * 100 * this.scoreMultiplier);
+        // Bonus targets: extra points for each target hit beyond the quota
+        const bonusTargets = Math.max(0, this.targetsHit - this.targetQuota);
+        const bonusTargetPoints = bonusTargets * 150 * this.scoreMultiplier;
 
         return {
             accuracy: accuracyBonus,
             pinpoint: pinpointBonus,
-            speed: timeBonus,
-            total: accuracyBonus + pinpointBonus + timeBonus,
+            bonusTargets: bonusTargetPoints,
+            bonusTargetCount: bonusTargets,
+            total: accuracyBonus + pinpointBonus + bonusTargetPoints,
             pinpointPercent: pinpointAccuracy
         };
     }

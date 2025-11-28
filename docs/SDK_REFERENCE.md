@@ -682,3 +682,190 @@ onRoundStart() {
 | `getLastTriggerGunIndex()` | Get last gun that fired (for game start) |
 | `_updateSinglePlayerCursors(gunIndex)` | Hide inactive cursors (internal) |
 | `_resetCursorVisibility()` | Show all cursors (internal) |
+
+---
+
+## Combo System (New in 1.2)
+
+The SDK provides a reusable combo system for tracking consecutive hits:
+
+```javascript
+import { ComboSystem } from '../../arcade/sdk/index.js';
+
+// Create combo system
+this.combo = new ComboSystem({
+    timeout: 2.0,  // Seconds before combo resets
+    thresholds: [  // Custom multiplier thresholds (optional)
+        { hits: 2, multiplier: 1.5 },
+        { hits: 4, multiplier: 2.0 },
+        { hits: 6, multiplier: 2.5 },
+        { hits: 8, multiplier: 3.0 },
+        { hits: 10, multiplier: 3.5 },
+        { hits: 15, multiplier: 4.0 }
+    ]
+});
+
+// Set callbacks
+this.combo.onUpdate = (combo, multiplier) => { /* Update display */ };
+this.combo.onBreak = (finalCombo) => { /* Show combo lost */ };
+this.combo.onMilestone = (combo, multiplier) => { /* New threshold reached */ };
+
+// On hit:
+this.combo.increment();
+const multiplier = this.combo.getMultiplier();
+const points = this.combo.applyMultiplier(basePoints);
+
+// On miss:
+this.combo.break();
+
+// Each frame:
+this.combo.update(dt);
+
+// Get state:
+this.combo.getCombo();        // Current combo count
+this.combo.getMaxCombo();     // Best combo this session
+this.combo.getTimerPercent(); // For UI bar (0-1)
+this.combo.getColor();        // CSS color for current level
+this.combo.isActive();        // True if combo >= 2
+```
+
+---
+
+## Floating Score Manager (New in 1.2)
+
+Animated floating score popups:
+
+```javascript
+import { FloatingScoreManager, ComboDisplay } from '../../arcade/sdk/index.js';
+
+// Create manager
+this.floatingScores = new FloatingScoreManager();
+
+// Spawn a score popup
+this.floatingScores.spawn(x, y, {
+    points: 150,
+    bonusText: 'PERFECT!',
+    color: '#ffd700',      // Optional override
+    combo: 5,              // Current combo (for display)
+    multiplier: 2.0,       // Current multiplier (for color)
+    playerIndex: 0,        // For multiplayer
+    playerColor: '#ff0000' // Player color override
+});
+
+// Spawn simple text
+this.floatingScores.spawnText(x, y, 'COMBO LOST!', '#ff4444', 20);
+
+// Each frame:
+this.floatingScores.update(dt);
+this.floatingScores.draw(ctx);
+```
+
+### Combo Display Widget
+
+Canvas-based combo counter with timer bar:
+
+```javascript
+import { ComboDisplay } from '../../arcade/sdk/index.js';
+
+this.comboDisplay = new ComboDisplay({ y: 80 });
+
+// Each frame:
+this.comboDisplay.update(
+    this.combo.getCombo(),
+    this.combo.getMultiplier(),
+    this.combo.getTimerPercent()
+);
+this.comboDisplay.draw(ctx, canvasWidth);
+```
+
+---
+
+## MenuBuilder Extensions (New in 1.2)
+
+### Create Section (titled container)
+
+```javascript
+// Create a titled section for grouping buttons
+const section = this.ui.menu.createSection({ 
+    title: '2 PLAYER MODES',
+    titleStyle: 'color: #888; margin-bottom: 10px;',  // Optional
+    style: 'margin-top: 20px;'  // Optional
+});
+
+// Add content to section
+const buttons = this.ui.menu.createButtonGroup([...]);
+section.appendChild(buttons);
+screen.appendChild(section);
+```
+
+### Difficulty Selection Screen
+
+```javascript
+this.ui.menu.showDifficultySelect({
+    title: 'SELECT DIFFICULTY',
+    difficulties: [
+        { id: 'beginner', label: 'BEGINNER' },
+        { id: 'medium', label: 'MEDIUM' },
+        { id: 'hard', label: 'HARD', color: '#662222' }  // Optional color
+    ],
+    onSelect: (difficultyId) => this.startGame(difficultyId),
+    onBack: () => this.showMenu()
+});
+```
+
+### Grid Menu (for practice mode, mini-game selection)
+
+```javascript
+this.ui.menu.showGridMenu({
+    title: 'PRACTICE MODE',
+    subtitle: 'Select Mini-Game & Difficulty',
+    sections: [
+        {
+            title: 'Classic Target',
+            buttons: [
+                { text: 'Beginner', onClick: () => this.startPractice('classic', 'beginner') },
+                { text: 'Medium', onClick: () => this.startPractice('classic', 'medium') },
+                { text: 'Hard', onClick: () => this.startPractice('classic', 'hard') }
+            ]
+        },
+        // ... more sections
+    ],
+    onBack: () => this.showMenu()
+});
+```
+
+---
+
+## OverlayBuilder Extensions (New in 1.2)
+
+### Stage Result Screen (with multiplayer support)
+
+**Single Player:**
+```javascript
+this.ui.overlay.showStageResult({
+    success: true,  // or false for failure
+    stats: [
+        { label: 'Base Score:', value: 1500 },
+        { label: 'Accuracy:', value: '+200', dividerAfter: true },
+        { label: 'TOTAL:', value: 1700, color: '#00ff00', isTotal: true }
+    ],
+    onNext: () => this.nextStage()
+});
+```
+
+**Multiplayer:**
+```javascript
+this.ui.overlay.showStageResult({
+    success: true,
+    multiplayer: {
+        players: [
+            { name: 'P1', color: '#ff4444', score: 500, hits: 8, shots: 10, totalScore: 1500 },
+            { name: 'P2', color: '#4444ff', score: 450, hits: 7, shots: 10, totalScore: 1200 }
+        ],
+        mode: 'versus',  // or 'coop'
+        teamScore: 950,  // For coop mode
+        teamInfo: '15/20 hits • 25.3s'  // Optional team info
+    },
+    onNext: () => this.nextStage()
+});
+```

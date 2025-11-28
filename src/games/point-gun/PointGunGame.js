@@ -1,5 +1,6 @@
 import { BaseGame } from '../../arcade/interfaces/BaseGame.js';
 import { LevelManager } from './LevelManager.js';
+import { ComboSystem, FloatingScoreManager, ComboDisplay } from '../../arcade/sdk/index.js';
 
 export class Game extends BaseGame {
     constructor(canvas, uiLayer, system) {
@@ -10,6 +11,18 @@ export class Game extends BaseGame {
 
         this.state = "MENU"; // MENU, PLAYING, GAMEOVER, INTRO, RESULT
         this.lastTime = 0;
+
+        // Combo system (SDK)
+        this.combo = new ComboSystem();
+        this.combo.onUpdate = (combo, multiplier) => this.onComboUpdate(combo, multiplier);
+        this.combo.onBreak = (finalCombo) => this.onComboBreak(finalCombo);
+        this.combo.onMilestone = (combo, multiplier) => this.onComboMilestone(combo, multiplier);
+        
+        // Floating scores (SDK)
+        this.floatingScores = new FloatingScoreManager();
+        
+        // Combo display (SDK)
+        this.comboDisplay = new ComboDisplay({ y: 80 });
 
         // Bind input via SDK-provided InputManager
         this.input.on("shoot", (coords) => this.handleShoot(coords));
@@ -76,6 +89,13 @@ export class Game extends BaseGame {
             this.state = "PLAYING";
             // Hide cursors for gameplay (SDK method)
             this.setInGame(true);
+            
+            // Re-apply single player cursor hiding after setInGame (SDK method)
+            const activeGun = this.getActiveGunIndex();
+            if (!this.isMultiplayer() && activeGun !== null) {
+                this._updateSinglePlayerCursors(activeGun);
+            }
+            
             this.hidePauseMenu();
         }
     }
@@ -105,6 +125,11 @@ export class Game extends BaseGame {
 
     handleShoot({ x, y, gunIndex }) {
         if (this.state === "PLAYING") {
+            // Use SDK method to check if this gun is allowed (single player filtering)
+            if (!this.isGunInputAllowed(gunIndex)) {
+                return;
+            }
+            
             this.sound.playShoot();
             
             // Get player index from gun (0 for single player/mouse)
@@ -117,7 +142,23 @@ export class Game extends BaseGame {
     update(dt) {
         if (this.state === "PLAYING") {
             this.levelManager.update(dt);
+            
+            // Update combo timer
+            this.combo.update(dt);
+            
+            // Update combo display
+            this.comboDisplay.update(
+                this.combo.getCombo(),
+                this.combo.getMultiplier(),
+                this.combo.getTimerPercent()
+            );
+            
+            // Update timer display
+            this.updateTimer();
         }
+        
+        // Update floating scores (always, for fade-out)
+        this.floatingScores.update(dt);
     }
 
     draw(ctx) {
@@ -125,8 +166,14 @@ export class Game extends BaseGame {
         ctx.fillStyle = "#222";
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        if (this.state === "PLAYING") {
+        if (this.state === "PLAYING" || this.state === "PAUSED") {
             this.levelManager.draw(ctx);
+            
+            // Draw floating scores
+            this.floatingScores.draw(ctx);
+            
+            // Draw combo display
+            this.comboDisplay.draw(ctx, this.canvas.width);
         }
     }
 
@@ -134,46 +181,83 @@ export class Game extends BaseGame {
         this.state = "MENU";
         // Show cursors for menu (SDK method)
         this.setInGame(false);
-        this.uiLayer.innerHTML = `
-      <div class="screen">
-        <h1>POINT BLANK WEB</h1>
-        <div class="difficulty-select">
-            <button id="btn-beginner" class="diff-btn">BEGINNER</button>
-            <button id="btn-medium" class="diff-btn">MEDIUM</button>
-            <button id="btn-hard" class="diff-btn">HARD</button>
-        </div>
-        <div style="margin-top: 15px;">
-            <button id="btn-2player" class="btn-primary">2 PLAYER</button>
-        </div>
-        <div style="margin-top: 20px;">
-            <button id="btn-highscores">HIGH SCORES</button>
-            <button id="btn-settings">SETTINGS</button>
-            <button id="btn-debug" style="font-size: 0.8rem; opacity: 0.7;">PRACTICE MODE</button>
-            <button id="btn-exit-arcade" style="font-size: 0.8rem; margin-top: 10px; background: #444;">EXIT TO ARCADE</button>
-        </div>
-      </div>
-    `;
-
-        document.getElementById("btn-beginner").onclick = () => this.startGame('beginner');
-        document.getElementById("btn-medium").onclick = () => this.startGame('medium');
-        document.getElementById("btn-hard").onclick = () => this.startGame('hard');
-        document.getElementById("btn-2player").onclick = () => this.showPlayerSelectMenu();
-        document.getElementById("btn-highscores").onclick = () => this.showHighScores();
-        document.getElementById("btn-settings").onclick = () => this._showSettingsScreen();
-        document.getElementById("btn-debug").onclick = () => this.showPracticeMenu();
-        document.getElementById("btn-exit-arcade").onclick = () => this.returnToArcade();
+        
+        // Reset single player gun lock (SDK method)
+        this.setSinglePlayerGun(null);
+        
+        // Build menu using SDK MenuBuilder
+        const screen = this.ui.menu.createScreen({
+            title: 'POINT GUN',
+            subtitle: 'Mini-Game Collection'
+        });
+        
+        // Single player difficulty buttons
+        const difficultyGroup = this.ui.menu.createButtonGroup([
+            { id: 'btn-beginner', text: 'BEGINNER', className: 'diff-btn', onClick: () => this.startGame('beginner') },
+            { id: 'btn-medium', text: 'MEDIUM', className: 'diff-btn', onClick: () => this.startGame('medium') },
+            { id: 'btn-hard', text: 'HARD', className: 'diff-btn', onClick: () => this.startGame('hard') }
+        ]);
+        screen.appendChild(difficultyGroup);
+        
+        // 2 Player section (using SDK createSection)
+        const multiplayerSection = this.ui.menu.createSection({ title: '2 PLAYER MODES' });
+        const multiplayerGroup = this.ui.menu.createButtonGroup([
+            { id: 'btn-versus', text: 'VERSUS', className: 'diff-btn', style: 'background: #662222;', onClick: () => this.showPlayerSelectMenu('versus') },
+            { id: 'btn-coop', text: 'CO-OP', className: 'diff-btn', style: 'background: #226622;', onClick: () => this.showPlayerSelectMenu('coop') }
+        ]);
+        multiplayerSection.appendChild(multiplayerGroup);
+        screen.appendChild(multiplayerSection);
+        
+        // Bottom buttons
+        const bottomSection = document.createElement('div');
+        bottomSection.style.cssText = 'margin-top: 20px; display: flex; flex-direction: column; gap: 0.5rem; align-items: center;';
+        
+        bottomSection.appendChild(this.ui.menu.createButton({ id: 'btn-highscores', text: 'HIGH SCORES', onClick: () => this.showHighScores() }));
+        bottomSection.appendChild(this.ui.menu.createButton({ id: 'btn-settings', text: 'SETTINGS', onClick: () => this._showSettingsScreen() }));
+        bottomSection.appendChild(this.ui.menu.createButton({ id: 'btn-debug', text: 'PRACTICE MODE', style: 'font-size: 0.8rem; opacity: 0.7;', onClick: () => this.showPracticeMenu() }));
+        bottomSection.appendChild(this.ui.menu.createButton({ id: 'btn-exit-arcade', text: 'EXIT TO ARCADE', style: 'font-size: 0.8rem; margin-top: 10px; background: #444;', onClick: () => this.returnToArcade() }));
+        
+        screen.appendChild(bottomSection);
+        this.ui.menu.show(screen);
     }
 
     /**
      * Show player selection screen for multiplayer
+     * @param {string} mode - 'versus' or 'coop'
      */
-    showPlayerSelectMenu() {
+    showPlayerSelectMenu(mode = 'versus') {
         this.showPlayerSelect({
-            onStart: (playerCount, mode, gunAssignments) => {
-                // Reset players for new game
+            minPlayers: 2,
+            defaultPlayers: 2,
+            onStart: (playerCount, selectedMode, gunAssignments) => {
+                // Initialize multiplayer session
+                this.players.initSession(playerCount, {
+                    mode: mode === 'coop' ? 'coop' : 'versus',
+                    simultaneous: true,
+                    gunAssignments
+                });
                 this.players.resetGame(3);
-                this.startGame('beginner'); // Start with beginner difficulty
+                
+                // All guns active in multiplayer (SDK method)
+                this.setSinglePlayerGun(null);
+                
+                this._startingMultiplayer = true;
+                this.showDifficultySelect();
             },
+            onBack: () => this.showMenu()
+        });
+    }
+    
+    /**
+     * Show difficulty selection after player select
+     */
+    showDifficultySelect() {
+        this.setInGame(false);
+        
+        // Use SDK MenuBuilder for difficulty selection
+        this.ui.menu.showDifficultySelect({
+            title: 'SELECT DIFFICULTY',
+            onSelect: (difficulty) => this.startGame(difficulty),
             onBack: () => this.showMenu()
         });
     }
@@ -182,11 +266,24 @@ export class Game extends BaseGame {
         // Hide cursors for gameplay (SDK method)
         this.setInGame(true);
         
-        // If single player, initialize with 1 player
-        if (!this.isMultiplayer()) {
+        // Check if this is a single player game
+        const isSinglePlayer = !this._startingMultiplayer;
+        
+        if (isSinglePlayer) {
+            // Single player - initialize with 1 player
             this.players.initSession(1, { mode: 'single' });
             this.players.resetGame(3);
+            
+            // Lock to the gun that started the game (SDK method)
+            const activeGun = this.getLastTriggerGunIndex();
+            this.setSinglePlayerGun(activeGun >= 0 ? activeGun : -1);
         }
+        
+        // Reset multiplayer flag
+        this._startingMultiplayer = false;
+        
+        // Reset combo for new game
+        this.combo.reset();
         
         this.levelManager.isPracticeMode = false;
         this.levelManager.setDifficulty(difficulty);
@@ -195,13 +292,62 @@ export class Game extends BaseGame {
 
     showHUD() {
         if (this.isMultiplayer()) {
-            this.showMultiplayerHUD();
+            // No center "round" display to avoid overlapping with mini-game text
+            // Stage info will be shown in a custom element
+            const hudConfig = {};
+            
+            // Add mode indicator (use SDK PlayerManager.gameMode)
+            if (this.players.gameMode === 'coop') {
+                hudConfig.modeLabel = 'CO-OP';
+            } else if (this.players.gameMode === 'versus') {
+                hudConfig.modeLabel = 'VERSUS';
+            }
+            
+            this.showMultiplayerHUD(hudConfig);
+            
+            // Add stage info underneath score (top-left)
+            const stageEl = document.createElement('div');
+            stageEl.id = 'stage-info';
+            stageEl.style.cssText = 'position: absolute; top: 55px; left: 20px; font-size: 16px; color: #ffcc00; text-shadow: 2px 2px 0 #000; z-index: 100;';
+            stageEl.textContent = `STAGE ${this.levelManager.currentStage}`;
+            this.uiLayer.appendChild(stageEl);
+            
+            // Add timer element at bottom center (big and prominent)
+            const timerEl = document.createElement('div');
+            timerEl.id = 'hud-timer';
+            timerEl.style.cssText = 'position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 36px; color: #fff; text-shadow: 3px 3px 0 #000; z-index: 100;';
+            timerEl.textContent = '⏱ --';
+            this.uiLayer.appendChild(timerEl);
         } else {
+            // Use SDK HUDBuilder - score/lives top-left, stage underneath, timer bottom center
             this.ui.hud.create({
                 score: this.levelManager.score,
-                lives: this.levelManager.lives
+                lives: this.levelManager.lives,
+                custom: {
+                    stageInfo: {
+                        position: 'top: 55px; left: 20px; font-size: 16px; color: #ffcc00; text-shadow: 2px 2px 0 #000;',
+                        text: `STAGE ${this.levelManager.currentStage}`
+                    },
+                    timer: {
+                        position: 'bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 36px; color: #fff; text-shadow: 3px 3px 0 #000;',
+                        text: '⏱ --'
+                    },
+                    gunIndicator: {
+                        position: 'bottom: 20px; right: 20px; font-size: 14px; color: #888; padding: 5px 10px; background: rgba(0,0,0,0.5); border-radius: 5px;',
+                        text: `🎯 ${this.getActiveGunLabel()}`
+                    }
+                }
             });
         }
+    }
+    
+    /**
+     * Get active gun label for HUD display
+     * @returns {string} Gun label text
+     */
+    getActiveGunLabel() {
+        const activeGun = this.getActiveGunIndex();
+        return activeGun === -1 ? 'MOUSE' : `GUN ${activeGun + 1}`;
     }
 
     updateScoreDisplay() {
@@ -213,15 +359,81 @@ export class Game extends BaseGame {
             this.ui.hud.update('score', this.levelManager.score);
         }
     }
+    
+    updateHUD() {
+        // Update all HUD elements including lives and timer
+        if (this.ui.hud) {
+            this.ui.hud.update('score', this.levelManager.score);
+            this.ui.hud.update('lives', this.levelManager.lives);
+            this.updateTimer();
+        }
+    }
+    
+    updateTimer() {
+        // Update timer display from current mini-game
+        if (this.levelManager.currentGame) {
+            const timeLeft = Math.max(0, Math.ceil(this.levelManager.currentGame.timeLimit));
+            const color = timeLeft <= 5 ? '#ff4444' : '#ffffff';
+            const timerText = `⏱ ${timeLeft}s`;
+            
+            // Update via HUD if available (single player)
+            if (this.ui.hud) {
+                this.ui.hud.update('timer', timerText);
+            }
+            
+            // Also update direct element (multiplayer or fallback)
+            const timerEl = document.getElementById('hud-timer');
+            if (timerEl) {
+                timerEl.textContent = timerText;
+                timerEl.style.color = color;
+            }
+        }
+    }
 
     showStageIntro(stageNum, objective, callback) {
         this.state = "INTRO";
+        
+        // Reset combo for new stage (so max combo is per-stage)
+        this.combo.reset();
+        
+        // Get mode-specific info
+        let info = `LIVES: ${this.levelManager.lives}`;
+        let borderColor = '#00ccff';
+        
+        // Show mode instructions on stage 1 (use SDK PlayerManager.gameMode)
+        if (stageNum === 1 && this.isMultiplayer()) {
+            if (this.players.gameMode === 'coop') {
+                info = 'Work together! Combined score wins.';
+                borderColor = '#22aa22';
+            } else if (this.players.gameMode === 'versus') {
+                info = 'Compete! Highest score wins each stage.';
+                borderColor = '#aa2222';
+            }
+        }
+        
+        // Show active gun in single player
+        if (stageNum === 1 && !this.isMultiplayer()) {
+            const activeGun = this.getActiveGunIndex();
+            const gunLabel = activeGun === -1 ? 'MOUSE' : `GUN ${activeGun + 1}`;
+            info = `${info} | Active: ${gunLabel}`;
+        }
+        
         this.ui.overlay.showIntro({
             title: `STAGE ${stageNum}`,
             subtitle: objective,
-            info: `LIVES: ${this.levelManager.lives}`,
-            duration: 2000,
+            info: info,
+            borderColor: borderColor,
+            duration: stageNum === 1 && this.isMultiplayer() ? 3000 : 2000,
             onComplete: () => {
+                this.state = "PLAYING";
+                this.setInGame(true);
+                
+                // Re-apply single player cursor hiding after setInGame (SDK method)
+                const activeGun = this.getActiveGunIndex();
+                if (!this.isMultiplayer() && activeGun !== null) {
+                    this._updateSinglePlayerCursors(activeGun);
+                }
+                
                 this.showHUD();
                 callback();
             }
@@ -233,11 +445,8 @@ export class Game extends BaseGame {
             this.state = "RESULT";
             // Show cursors for stage result screen (SDK method)
             this.setInGame(false);
-            const msg = success ? "STAGE CLEAR!" : "LIFE LOST!";
-            const color = success ? "#00ccff" : "#ff0055";
 
-            let statsHTML = '';
-            // Show stats always (success or fail) as long as we have a game instance
+            // Calculate stats if we have a game instance
             if (this.levelManager.currentGame) {
                 const game = this.levelManager.currentGame;
                 const bonuses = game.calculateBonuses();
@@ -246,63 +455,64 @@ export class Game extends BaseGame {
 
                 // Award bonuses
                 const roundTotal = bonuses.total + game.stats.baseScore;
-                this.levelManager.score += bonuses.total; // Add bonuses to global score (base score already added during game)
+                this.levelManager.score += bonuses.total;
 
-                statsHTML = `
-            <div class="stats-breakdown">
-              <div class="stat-row">
-                <span>Base Score:</span>
-                <span>${game.stats.baseScore}</span>
-              </div>
-              <div class="stat-row">
-                <span>Difficulty (${game.difficulty.toUpperCase()}):</span>
-                <span>x${game.scoreMultiplier}</span>
-              </div>
-              <div class="stat-row">
-                <span>Accuracy (${accuracy.toFixed(1)}%):</span>
-                <span>+${bonuses.accuracy}</span>
-              </div>
-              <div class="stat-row">
-                <span>Pinpoint (${bonuses.pinpointPercent.toFixed(1)}%):</span>
-                <span>+${bonuses.pinpoint}</span>
-              </div>
-              <div class="stat-row">
-                <span>Speed Bonus:</span>
-                <span>+${bonuses.speed}</span>
-              </div>
-              
-              <div class="stat-divider" style="margin: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3);"></div>
-
-              <div class="stat-row total" style="font-size: 1.2em; color: #ffff00;">
-                <span>ROUND SCORE:</span>
-                <span>${roundTotal}</span>
-              </div>
-              <div class="stat-row total" style="font-size: 1.4em; color: #00ff00; margin-top: 5px;">
-                <span>TOTAL SCORE:</span>
-                <span>${this.levelManager.score}</span>
-              </div>
-
-              <div class="stat-info">
-                ${game.stats.hits}/${game.stats.shots} hits • ${time.toFixed(1)}s
-              </div>
-            </div>
-          `;
-            }
-
-            this.uiLayer.innerHTML = `
-            <div class="screen result" style="border-color: ${color}">
-                <h1 style="color: ${color}">${msg}</h1>
-                ${statsHTML}
-                <button id="btn-next" style="margin-top: 20px;">NEXT</button>
-            </div>
-        `;
-
-            const btnNext = document.getElementById('btn-next');
-            if (btnNext) {
-                btnNext.onclick = () => {
-                    callback();
-                };
-                btnNext.focus();
+                if (this.isMultiplayer()) {
+                    // Use SDK OverlayBuilder for multiplayer stage result
+                    const playerStats = game.playerStats || [];
+                    const players = playerStats.map((ps, index) => ({
+                        name: `P${index + 1}`,
+                        color: this.players.getPlayer(index)?.colors?.primary || ['#ff4444', '#4444ff'][index],
+                        score: ps?.score || 0,
+                        hits: ps?.hits || 0,
+                        shots: ps?.shots || 0,
+                        totalScore: this.players.getPlayer(index)?.score || 0
+                    }));
+                    
+                    this.ui.overlay.showStageResult({
+                        success,
+                        multiplayer: {
+                            players,
+                            mode: this.players.gameMode,
+                            teamScore: this.players.gameMode === 'coop' ? roundTotal : undefined,
+                            teamInfo: this.players.gameMode === 'coop' ? `${game.stats.hits}/${game.stats.shots} hits • ${time.toFixed(1)}s` : undefined
+                        },
+                        onNext: callback
+                    });
+                } else {
+                    // Use SDK OverlayBuilder for single player stage result
+                    // Note: baseScore already includes difficulty and combo multipliers
+                    const maxCombo = this.combo.getMaxCombo();
+                    const diffLabel = game.difficulty.charAt(0).toUpperCase() + game.difficulty.slice(1);
+                    
+                    // Build stats with info text showing difficulty and combo
+                    const infoText = `${diffLabel} (x${game.scoreMultiplier}) • Max Combo: ${maxCombo}`;
+                    
+                    // Build bonus targets label
+                    const bonusLabel = bonuses.bonusTargetCount > 0 
+                        ? `Bonus Targets (${bonuses.bonusTargetCount}):` 
+                        : 'Bonus Targets:';
+                    
+                    this.ui.overlay.showStageResult({
+                        success,
+                        info: infoText,
+                        stats: [
+                            { label: 'Hit Score:', value: game.stats.baseScore },
+                            { label: `Accuracy Bonus (${accuracy.toFixed(1)}%):`, value: `+${bonuses.accuracy}` },
+                            { label: `Pinpoint Bonus (${bonuses.pinpointPercent.toFixed(1)}%):`, value: `+${bonuses.pinpoint}` },
+                            { label: bonusLabel, value: `+${bonuses.bonusTargets}`, dividerAfter: true },
+                            { label: 'ROUND SCORE:', value: roundTotal, color: '#ffff00', isTotal: true },
+                            { label: 'TOTAL SCORE:', value: this.levelManager.score, color: '#00ff00', isTotal: true }
+                        ],
+                        onNext: callback
+                    });
+                }
+            } else {
+                // No game instance, just show basic result
+                this.ui.overlay.showStageResult({
+                    success,
+                    onNext: callback
+                });
             }
         } catch (e) {
             console.error("Error in showStageResult:", e);
@@ -352,17 +562,13 @@ export class Game extends BaseGame {
     showGameClearScreen(finalScore) {
         this.setInGame(false);
         
-        this.uiLayer.innerHTML = `
-            <div class="screen">
-                <h1>CONGRATULATIONS!</h1>
-                <h2>ALL STAGES CLEARED</h2>
-                <h3>FINAL SCORE: ${finalScore}</h3>
-                <button id="btn-highscores">HIGH SCORES</button>
-                <button id="btn-menu">MENU</button>
-            </div>
-        `;
-        document.getElementById("btn-highscores").onclick = () => this.showHighScores();
-        document.getElementById("btn-menu").onclick = () => this.showMenu();
+        // Use SDK OverlayBuilder for game clear
+        this.ui.overlay.showGameOver({
+            cleared: true,
+            score: finalScore,
+            onRetry: () => this.startGame(this.levelManager.difficulty),
+            onMenu: () => this.showMenu()
+        });
     }
 
     gameOver() {
@@ -432,59 +638,34 @@ export class Game extends BaseGame {
     showPracticeMenu() {
         // Show cursors for practice menu (SDK method)
         this.setInGame(false);
-        this.uiLayer.innerHTML = `
-            <div class="screen">
-                <h1>PRACTICE MODE</h1>
-                <h3>Select Mini-Game & Difficulty</h3>
-                
-                <div class="debug-grid">
-                    <div class="debug-section">
-                        <h4>Classic Target</h4>
-                        <button class="debug-btn" data-game="ClassicTarget" data-diff="beginner">Beginner</button>
-                        <button class="debug-btn" data-game="ClassicTarget" data-diff="medium">Medium</button>
-                        <button class="debug-btn" data-game="ClassicTarget" data-diff="hard">Hard</button>
-                    </div>
-                    
-                    <div class="debug-section">
-                        <h4>Color Match</h4>
-                        <button class="debug-btn" data-game="ColorMatch" data-diff="beginner">Beginner</button>
-                        <button class="debug-btn" data-game="ColorMatch" data-diff="medium">Medium</button>
-                        <button class="debug-btn" data-game="ColorMatch" data-diff="hard">Hard</button>
-                    </div>
-                    
-                    <div class="debug-section">
-                        <h4>Bomb Panic</h4>
-                        <button class="debug-btn" data-game="BombPanic" data-diff="beginner">Beginner</button>
-                        <button class="debug-btn" data-game="BombPanic" data-diff="medium">Medium</button>
-                        <button class="debug-btn" data-game="BombPanic" data-diff="hard">Hard</button>
-                    </div>
-                    
-                    <div class="debug-section">
-                        <h4>Quick Draw</h4>
-                        <button class="debug-btn" data-game="QuickDraw" data-diff="beginner">Beginner</button>
-                        <button class="debug-btn" data-game="QuickDraw" data-diff="medium">Medium</button>
-                        <button class="debug-btn" data-game="QuickDraw" data-diff="hard">Hard</button>
-                    </div>
-                </div>
-                
-                <button id="btn-back">BACK TO MENU</button>
-            </div>
-        `;
-
-        document.querySelectorAll('.debug-btn').forEach(btn => {
-            btn.onclick = () => {
-                const game = btn.dataset.game;
-                const diff = btn.dataset.diff;
-                this.startPracticeGame(game, diff);
-            };
+        
+        // Define mini-games and difficulties
+        const miniGames = ['ClassicTarget', 'ColorMatch', 'BombPanic', 'QuickDraw'];
+        const difficulties = ['beginner', 'medium', 'hard'];
+        
+        // Build sections for SDK grid menu
+        const sections = miniGames.map(gameName => ({
+            title: gameName.replace(/([A-Z])/g, ' $1').trim(), // Add spaces before capitals
+            buttons: difficulties.map(diff => ({
+                text: diff.charAt(0).toUpperCase() + diff.slice(1),
+                data: { game: gameName, diff: diff },
+                onClick: () => this.startPracticeGame(gameName, diff)
+            }))
+        }));
+        
+        // Use SDK MenuBuilder for grid menu
+        this.ui.menu.showGridMenu({
+            title: 'PRACTICE MODE',
+            subtitle: 'Select Mini-Game & Difficulty',
+            sections,
+            onBack: () => this.showMenu()
         });
-
-        document.getElementById("btn-back").onclick = () => this.showMenu();
     }
 
     startPracticeGame(gameName, difficulty) {
         // Enable practice mode
         this.levelManager.isPracticeMode = true;
+        this.setInGame(true);
 
         // Import the game class dynamically
         import(`./minigames/${gameName}.js`).then(module => {
@@ -495,17 +676,92 @@ export class Game extends BaseGame {
             this.levelManager.score = 0;
             this.levelManager.currentGame = new GameClass(this, difficulty);
 
-            // Show simple UI
-            this.uiLayer.innerHTML = `
-                <div style="position: absolute; top: 20px; left: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                    PRACTICE: ${gameName} (${difficulty})
-                </div>
-                <div style="position: absolute; top: 20px; right: 20px; font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;">
-                    SCORE: <span id="score-display">0</span>
-                </div>
-            `;
+            // Use SDK HUDBuilder for practice mode HUD
+            const displayName = gameName.replace(/([A-Z])/g, ' $1').trim();
+            this.ui.hud.create({
+                score: 0,
+                custom: {
+                    practiceLabel: {
+                        position: 'top: 20px; left: 20px;',
+                        text: `PRACTICE: ${displayName} (${difficulty})`
+                    }
+                }
+            });
 
             this.levelManager.currentGame.start();
         });
+    }
+    
+    // =========================================================================
+    // COMBO SYSTEM CALLBACKS
+    // =========================================================================
+    
+    /**
+     * Called when combo is updated (on hit)
+     */
+    onComboUpdate(combo, multiplier) {
+        // Play combo sound at milestones
+        if (combo === 3 || combo === 5 || combo === 8 || combo === 10 || combo === 15) {
+            this.sound.playCombo();
+        }
+    }
+    
+    /**
+     * Called when combo breaks (on miss or timeout)
+     */
+    onComboBreak(finalCombo) {
+        if (finalCombo >= 5) {
+            // Show combo lost message
+            this.floatingScores.spawnText(
+                this.canvas.width / 2,
+                120,
+                `COMBO LOST (x${finalCombo})`,
+                '#ff4444',
+                20
+            );
+        }
+    }
+    
+    /**
+     * Called when a new combo multiplier threshold is reached
+     */
+    onComboMilestone(combo, multiplier) {
+        // Could add special effects here
+    }
+    
+    /**
+     * Spawn a floating score (called by MiniGame)
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @param {Object} options - Score options
+     */
+    spawnFloatingScore(x, y, options = {}) {
+        this.floatingScores.spawn(x, y, {
+            ...options,
+            combo: this.combo.getCombo(),
+            multiplier: this.combo.getMultiplier()
+        });
+    }
+    
+    /**
+     * Get current combo multiplier (for MiniGame scoring)
+     * @returns {number}
+     */
+    getComboMultiplier() {
+        return this.combo.getMultiplier();
+    }
+    
+    /**
+     * Increment combo (called by MiniGame on hit)
+     */
+    incrementCombo() {
+        this.combo.increment();
+    }
+    
+    /**
+     * Break combo (called by MiniGame on miss)
+     */
+    breakCombo() {
+        this.combo.break();
     }
 }

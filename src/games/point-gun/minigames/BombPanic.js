@@ -7,34 +7,28 @@ export class BombPanic extends MiniGame {
         this.timeLimit = 25;
         this.entities = [];
 
+        // Difficulty scaling - time-based rounds with quota to pass
         if (difficulty === 'beginner') {
-            this.targetQuota = 5;
-            this.bombCount = 2;
-            this.speed = 200;
-            this.timeLimit = 20;
+            this.targetQuota = 8;       // Need 8 targets to pass
+            this.timeLimit = 25;        // 25 seconds
+            this.bombCount = 2;         // Few bombs
+            this.speed = 150;           // Slow
+            this.spawnRate = 800;       // Spawn rate
         } else if (difficulty === 'medium') {
-            this.targetQuota = 10;
-            this.bombCount = 4;
-            this.speed = 350;
-            this.timeLimit = 20;
+            this.targetQuota = 12;      // Need 12 to pass
+            this.timeLimit = 25;
+            this.bombCount = 4;         // More bombs
+            this.speed = 250;
+            this.spawnRate = 600;
         } else {
-            this.targetQuota = 15;
-            this.bombCount = 6;
-            this.speed = 600;
-            this.timeLimit = 20;
+            this.targetQuota = 16;      // Need 16 to pass
+            this.timeLimit = 25;
+            this.bombCount = 6;         // Many bombs
+            this.speed = 400;
+            this.spawnRate = 450;
         }
 
-        this.targetsShot = 0;
         this.lastTickTime = 0;
-
-        // Spawn configuration
-        if (difficulty === 'beginner') {
-            this.spawnRate = 1000; // ms
-        } else if (difficulty === 'medium') {
-            this.spawnRate = 700;
-        } else {
-            this.spawnRate = 500;
-        }
         this.lastSpawn = 0;
 
         // Load background
@@ -44,7 +38,8 @@ export class BombPanic extends MiniGame {
     start() {
         super.start();
         this.entities = [];
-        this.targetsShot = 0;
+        this.targetsHit = 0;
+        this.quotaReached = false;
 
         // Spawn initial targets
         for (let i = 0; i < 3; i++) this.spawnEntity('target');
@@ -78,8 +73,8 @@ export class BombPanic extends MiniGame {
             }
         }
 
-        if (this.timeLimit <= 0) {
-            this.fail();
+        // Check time - round ends when time is up
+        if (!this.checkTimeAndContinue()) {
             return;
         }
 
@@ -247,17 +242,23 @@ export class BombPanic extends MiniGame {
             ctx.restore();
         });
 
-        // Draw Quota
+        // Draw Quota - show progress and indicate when quota is reached
         ctx.font = "30px Arial";
-        ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(`ENEMIES: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        
+        if (this.quotaReached) {
+            ctx.fillStyle = "#00ff00";
+            ctx.fillText(`ENEMIES: ${this.targetsHit} ✓ BONUS TIME!`, this.game.canvas.width / 2, 50);
+        } else {
+            ctx.fillStyle = "#fff";
+            ctx.fillText(`ENEMIES: ${this.targetsHit} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        }
 
         super.drawParticles(ctx);
     }
 
-    handleInput(x, y) {
-        super.handleInput(x, y);
+    handleInput(x, y, playerIndex = 0) {
+        super.handleInput(x, y, playerIndex);
 
         for (let i = this.entities.length - 1; i >= 0; i--) {
             const e = this.entities[i];
@@ -267,10 +268,13 @@ export class BombPanic extends MiniGame {
 
             if (dist < e.size) {
                 if (e.type === 'bomb') {
-                    // Hit Bomb!
-                    this.game.sound.playGameOver();
-                    this.spawnExplosion(e.x, e.y, "#000000"); // Bomb explosion
-                    this.fail();
+                    // Hit Bomb! Penalty but continue playing
+                    this.spawnExplosion(e.x, e.y, "#ff4400"); // Orange explosion for bomb
+                    this.entities.splice(i, 1);
+                    this.spawnEntity('bomb'); // Respawn a bomb
+                    
+                    // Apply penalty - lose a life but continue (unless out of lives)
+                    this.applyPenalty(playerIndex);
                 } else {
                     // Hit Target
                     this.game.sound.playHit();
@@ -280,20 +284,21 @@ export class BombPanic extends MiniGame {
                     const accuracyFactor = 1 - (dist / e.size) * 0.5;
                     const points = Math.ceil(100 * accuracyFactor);
 
-                    this.recordHit(points, accuracyFactor);
-                    this.targetsShot++;
+                    this.recordHit(points, accuracyFactor, playerIndex, e.x, e.y);
+                    this.incrementTargetsHit();
 
                     // Explosion
                     this.spawnExplosion(e.x, e.y, "#556B2F");
 
                     this.entities.splice(i, 1);
-
-                    if (this.targetsShot >= this.targetQuota) {
-                        this.complete();
-                    }
+                    
+                    // Round continues until time runs out - spawn replacement target
+                    this.spawnEntity('target');
                 }
                 return;
             }
         }
+        // Miss - didn't hit anything
+        this.recordMiss(playerIndex);
     }
 }

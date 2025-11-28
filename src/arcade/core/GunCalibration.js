@@ -351,7 +351,11 @@ export class GunCalibration {
         positionTarget(0);
 
         // Handle input
+        let calibrationComplete = false;
         const inputHandler = (rawAxis1, rawAxis2, buttons) => {
+            // Guard against events after completion
+            if (calibrationComplete || currentStep >= points.length) return;
+            
             // Check for trigger press
             if (buttons.leftPressed) {
                 const point = points[currentStep];
@@ -366,7 +370,11 @@ export class GunCalibration {
                 currentStep++;
 
                 if (currentStep >= points.length) {
-                    // Calibration complete - analyze and save
+                    // Calibration complete - mark complete and unsubscribe FIRST
+                    calibrationComplete = true;
+                    unsubscribe();
+                    
+                    // Analyze and save
                     const calibrationResult = this.analyzeCalibration(rawCaptures);
                     this.setCalibration(deviceId, calibrationResult);
                     
@@ -379,7 +387,8 @@ export class GunCalibration {
         };
 
         // Register input handler
-        const unsubscribe = onRawInput(inputHandler);
+        let unsubscribe = null;
+        unsubscribe = onRawInput(inputHandler);
 
         // Cancel button
         document.getElementById('btn-cancel-cal').onclick = () => {

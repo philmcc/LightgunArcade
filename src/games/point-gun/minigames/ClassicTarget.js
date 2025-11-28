@@ -7,34 +7,33 @@ export class ClassicTarget extends MiniGame {
         this.timeLimit = 30;
         this.targets = [];
 
-        // Difficulty scaling
+        // Difficulty scaling - time-based rounds with quota to pass
+        // All difficulties have same time, but harder = more targets needed
         if (difficulty === 'beginner') {
-            this.targetQuota = 10;
-            this.spawnRate = 600;
-            this.targetSpeed = 200;
-            this.maxTargets = 5;
-            this.timeLimit = 20;
-            this.minLifetime = 2.0;
-            this.maxLifetimeRange = 2.0;
-        } else if (difficulty === 'medium') {
-            this.targetQuota = 15;
-            this.spawnRate = 450;
-            this.targetSpeed = 350;
-            this.maxTargets = 7;
-            this.timeLimit = 20;
-            this.minLifetime = 1.5;
+            this.targetQuota = 8;       // Need 8 to pass
+            this.timeLimit = 25;        // 25 seconds
+            this.spawnRate = 500;       // Spawn every 500ms
+            this.targetSpeed = 150;     // Slow movement
+            this.maxTargets = 6;        // Max on screen
+            this.minLifetime = 2.5;     // Targets last longer
             this.maxLifetimeRange = 1.5;
+        } else if (difficulty === 'medium') {
+            this.targetQuota = 12;      // Need 12 to pass
+            this.timeLimit = 25;        // Same time
+            this.spawnRate = 400;       // Faster spawns
+            this.targetSpeed = 250;     // Medium speed
+            this.maxTargets = 7;
+            this.minLifetime = 2.0;
+            this.maxLifetimeRange = 1.0;
         } else {
-            this.targetQuota = 20;
-            this.spawnRate = 350;
-            this.targetSpeed = 700;
+            this.targetQuota = 16;      // Need 16 to pass
+            this.timeLimit = 25;        // Same time
+            this.spawnRate = 300;       // Fast spawns
+            this.targetSpeed = 400;     // Fast movement
             this.maxTargets = 8;
-            this.timeLimit = 20;
-            this.minLifetime = 1.0;
+            this.minLifetime = 1.5;
             this.maxLifetimeRange = 1.0;
         }
-
-        this.targetsShot = 0;
         this.lastSpawn = 0;
         this.lastTickTime = 0;
 
@@ -45,7 +44,8 @@ export class ClassicTarget extends MiniGame {
     start() {
         super.start();
         this.targets = [];
-        this.targetsShot = 0;
+        this.targetsHit = 0;
+        this.quotaReached = false;
         this.spawnTarget();
     }
 
@@ -78,8 +78,8 @@ export class ClassicTarget extends MiniGame {
             }
         }
 
-        if (this.timeLimit <= 0) {
-            this.fail();
+        // Check time - round ends when time is up
+        if (!this.checkTimeAndContinue()) {
             return;
         }
 
@@ -170,17 +170,25 @@ export class ClassicTarget extends MiniGame {
         });
         ctx.shadowColor = "transparent";
 
-        // Draw Quota
+        // Draw Quota - show progress and indicate when quota is reached
         ctx.font = "30px Arial";
-        ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(`TARGETS: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        
+        if (this.quotaReached) {
+            // Quota reached - show in green, encourage bonus points
+            ctx.fillStyle = "#00ff00";
+            ctx.fillText(`TARGETS: ${this.targetsHit} ✓ BONUS TIME!`, this.game.canvas.width / 2, 50);
+        } else {
+            // Still working toward quota
+            ctx.fillStyle = "#fff";
+            ctx.fillText(`TARGETS: ${this.targetsHit} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        }
 
         super.drawParticles(ctx);
     }
 
-    handleInput(x, y) {
-        super.handleInput(x, y);
+    handleInput(x, y, playerIndex = 0) {
+        super.handleInput(x, y, playerIndex);
 
         for (let i = this.targets.length - 1; i >= 0; i--) {
             const t = this.targets[i];
@@ -197,23 +205,20 @@ export class ClassicTarget extends MiniGame {
                 const accuracyFactor = 1 - (dist / t.size) * 0.5;
                 const points = Math.ceil(100 * accuracyFactor);
 
-                this.recordHit(points, accuracyFactor);
-                this.targetsShot++;
+                this.recordHit(points, accuracyFactor, playerIndex, t.x, t.y);
+                this.incrementTargetsHit();
 
                 // Explosion
                 this.spawnExplosion(t.x, t.y, "#ff0000");
 
                 this.targets.splice(i, 1);
-
-                if (this.targetsShot >= this.targetQuota) {
-                    this.complete();
-                } else {
-                    this.spawnTarget();
-                }
+                
+                // Always spawn a new target - round continues until time runs out
+                this.spawnTarget();
                 return;
             }
         }
-        // Miss?
-        // this.game.sound.playMiss();
+        // Miss - record it
+        this.recordMiss(playerIndex);
     }
 }

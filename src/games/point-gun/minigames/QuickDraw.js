@@ -7,24 +7,25 @@ export class QuickDraw extends MiniGame {
         this.target = null; // This will be replaced by currentTarget
         this.state = 'WAITING'; // WAITING, DRAW, RESULT
 
+        // Difficulty scaling - time-based with quota to pass
+        // QuickDraw is unique: you have total time to complete N duels
+        // Each duel has a reaction time limit
         if (difficulty === 'beginner') {
-            this.targetQuota = 3;
-            this.reactionTime = 2.4; // Increased from 2.0
-            this.timeLimit = 12; // Increased from 10
-            this.targetSize = 100;
+            this.targetQuota = 5;       // Need 5 successful duels to pass
+            this.reactionTime = 2.5;    // Generous reaction window
+            this.timeLimit = 30;        // 30 seconds total
+            this.targetSize = 100;      // Large target
         } else if (difficulty === 'medium') {
-            this.targetQuota = 5;
-            this.reactionTime = 1.8; // Increased from 1.5
-            this.timeLimit = 18; // Increased from 15
-            this.targetSize = 70;
+            this.targetQuota = 8;       // Need 8 to pass
+            this.reactionTime = 2.0;    // Tighter window
+            this.timeLimit = 30;
+            this.targetSize = 80;
         } else {
-            this.targetQuota = 8;
-            this.reactionTime = 1.2; // Increased from 1.0
-            this.timeLimit = 24; // Increased from 20
-            this.targetSize = 50;
+            this.targetQuota = 12;      // Need 12 to pass
+            this.reactionTime = 1.5;    // Fast reactions needed
+            this.timeLimit = 30;
+            this.targetSize = 60;
         }
-
-        this.targetsShot = 0;
         this.currentTarget = null;
         this.state = 'WAITING'; // WAITING, DRAW, RESULT
         this.waitTime = 0;
@@ -37,6 +38,8 @@ export class QuickDraw extends MiniGame {
 
     start() {
         super.start();
+        this.targetsHit = 0;
+        this.quotaReached = false;
         // The game now starts with startNextRound() in the constructor
     }
 
@@ -64,8 +67,8 @@ export class QuickDraw extends MiniGame {
     }
 
     update(dt) {
-        if (this.timeLimit <= 0) {
-            this.fail();
+        // Check time - round ends when time is up
+        if (!this.checkTimeAndContinue()) {
             return;
         }
 
@@ -78,9 +81,10 @@ export class QuickDraw extends MiniGame {
         } else if (this.state === 'DRAW') {
             this.drawTimer += dt;
             if (this.drawTimer > this.reactionTime) {
-                // Too slow!
-                this.game.sound.playGameOver(); // Fail sound
-                this.fail();
+                // Too slow! But don't end the game - just start next duel
+                this.game.sound.playMiss ? this.game.sound.playMiss() : null;
+                this.recordMiss(0);
+                this.startNextRound();
             }
         }
 
@@ -152,17 +156,23 @@ export class QuickDraw extends MiniGame {
             ctx.fillText("FIRE!", this.game.canvas.width / 2, 100);
         }
 
-        // Draw Quota
+        // Draw Quota - show progress and indicate when quota is reached
         ctx.font = "30px Arial";
-        ctx.fillStyle = "#fff";
         ctx.textAlign = "center";
-        ctx.fillText(`DUELS: ${this.targetsShot} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        
+        if (this.quotaReached) {
+            ctx.fillStyle = "#00ff00";
+            ctx.fillText(`DUELS: ${this.targetsHit} ✓ BONUS TIME!`, this.game.canvas.width / 2, 50);
+        } else {
+            ctx.fillStyle = "#fff";
+            ctx.fillText(`DUELS: ${this.targetsHit} / ${this.targetQuota}`, this.game.canvas.width / 2, 50);
+        }
 
         super.drawParticles(ctx);
     }
 
-    handleInput(x, y) {
-        super.handleInput(x, y);
+    handleInput(x, y, playerIndex = 0) {
+        super.handleInput(x, y, playerIndex);
 
         if (this.state === 'DRAW' && this.currentTarget) {
             const t = this.currentTarget;
@@ -180,25 +190,24 @@ export class QuickDraw extends MiniGame {
                 // Speed bonus for quick draw
                 const speedFactor = 1 + (this.reactionTime - this.drawTimer);
 
-                this.recordHit(Math.floor(points * speedFactor), accuracyFactor);
-                this.targetsShot++;
+                this.recordHit(Math.floor(points * speedFactor), accuracyFactor, playerIndex, t.x, t.y);
+                this.incrementTargetsHit();
 
                 // Explosion
                 this.spawnExplosion(t.x, t.y, "#f4e4bc"); // Paper color explosion
 
-                if (this.targetsShot >= this.targetQuota) {
-                    this.complete();
-                } else {
-                    this.startNextRound();
-                }
+                // Always start next round - continue until time runs out
+                this.startNextRound();
             } else {
                 // Missed the poster!
-                this.recordMiss();
+                this.recordMiss(playerIndex);
             }
         } else if (this.state === 'WAITING') {
-            // Fired too early!
-            this.game.sound.playGameOver(); // Penalty sound
-            this.fail();
+            // Fired too early! Penalty but don't end game
+            this.game.sound.playMiss ? this.game.sound.playMiss() : null;
+            this.recordMiss(playerIndex);
+            // Reset wait time as penalty
+            this.waitTime = 1.5 + Math.random() * 1.5;
         }
     }
 }

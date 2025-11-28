@@ -447,9 +447,18 @@ export class GunManager {
      * Handle HID input from a device
      */
     handleHIDInput(inputData) {
+        // Log ALL button presses for debugging
+        if (inputData.buttons.leftPressed || inputData.buttons.rightPressed || inputData.buttons.middlePressed) {
+            console.log('HID Button press:', {
+                deviceId: inputData.deviceId,
+                buttons: inputData.buttons,
+                hasPendingMap: !!this._pendingButtonMap
+            });
+        }
+        
         // Check for pending button mapping first
         if (this._pendingButtonMap) {
-            const { targetDeviceId, callback } = this._pendingButtonMap;
+            const { targetDeviceId, acceptAnyDevice, callback } = this._pendingButtonMap;
             
             // Log for debugging
             if (inputData.buttons.leftPressed || inputData.buttons.rightPressed || inputData.buttons.middlePressed) {
@@ -457,12 +466,15 @@ export class GunManager {
                     received: inputData.deviceId,
                     expected: targetDeviceId,
                     match: inputData.deviceId === targetDeviceId,
+                    acceptAnyDevice,
                     buttons: inputData.buttons
                 });
             }
             
-            // Only accept input from the target device
-            if (inputData.deviceId === targetDeviceId) {
+            // Accept input from target device OR any device if acceptAnyDevice is true
+            const deviceMatches = inputData.deviceId === targetDeviceId || acceptAnyDevice;
+            
+            if (deviceMatches) {
                 // Determine which button was just pressed
                 let buttonIndex = -1;
                 if (inputData.buttons.leftPressed) buttonIndex = 0;
@@ -470,13 +482,33 @@ export class GunManager {
                 else if (inputData.buttons.middlePressed) buttonIndex = 2;
 
                 if (buttonIndex >= 0) {
-                    callback(buttonIndex);
+                    callback(buttonIndex, inputData.deviceId);
                     return; // Don't process further
                 }
             }
         }
         
-        const gun = this.getGunByHIDDeviceId(inputData.deviceId);
+        let gun = this.getGunByHIDDeviceId(inputData.deviceId);
+        
+        // If gun not found by exact ID, try to find by similar device (same vendor/product)
+        // This handles the case where device ID changes between sessions
+        if (!gun) {
+            // Check if any gun has a similar device ID (same vendor:product prefix)
+            const devicePrefix = inputData.deviceId.split(':').slice(0, 2).join(':');
+            gun = this.guns.find(g => {
+                if (!g.config.hidDeviceId) return false;
+                const gunPrefix = g.config.hidDeviceId.split(':').slice(0, 2).join(':');
+                return gunPrefix === devicePrefix;
+            });
+            
+            if (gun) {
+                // Update the gun's device ID to the new one
+                console.log(`Updating gun ${gun.index} device ID: ${gun.config.hidDeviceId} -> ${inputData.deviceId}`);
+                gun.config.hidDeviceId = inputData.deviceId;
+                this.saveProfiles();
+            }
+        }
+        
         if (!gun) return;
 
         // Update gun state based on HID input
@@ -631,15 +663,33 @@ export class GunManager {
         if (gun.config.hidDeviceId) {
             let resolved = false;
             const targetDeviceId = gun.config.hidDeviceId;
-            console.log(`Setting up HID listener for gun ${gunIndex}, deviceId: ${targetDeviceId}`);
+            
+            // Also get all current device IDs from HID manager for fallback matching
+            const currentDeviceIds = this.hidManager ? Array.from(this.hidManager.devices.keys()) : [];
+            console.log(`Setting up HID listener for gun ${gunIndex}:`, {
+                savedDeviceId: targetDeviceId,
+                currentDeviceIds,
+                gunConnected: gun.state.isConnected
+            });
             
             // Store pending button mapping request
+            // Accept input from the saved device ID OR any device if only one is connected
             this._pendingButtonMap = {
                 gunIndex,
                 targetDeviceId,
-                callback: (buttonIndex) => {
+                // If the saved device ID doesn't match any current device, accept from any
+                acceptAnyDevice: !currentDeviceIds.includes(targetDeviceId),
+                callback: (buttonIndex, actualDeviceId) => {
                     if (resolved) return;
                     resolved = true;
+                    
+                    // Update the gun's device ID if it changed
+                    if (actualDeviceId && actualDeviceId !== targetDeviceId) {
+                        console.log(`Updating gun ${gunIndex} device ID: ${targetDeviceId} -> ${actualDeviceId}`);
+                        gun.config.hidDeviceId = actualDeviceId;
+                        this.saveProfiles();
+                    }
+                    
                     this._pendingButtonMap = null;
                     console.log(`Gun ${gunIndex} HID button pressed: ${buttonIndex}`);
                     callback(buttonIndex);

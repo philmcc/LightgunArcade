@@ -300,29 +300,54 @@ export class HIDDeviceManager {
     handleInputReport(deviceId, event) {
         const { data, device, reportId } = event;
         
-        // Parse HID mouse report
-        // Standard mouse report format:
-        // Byte 0: Button state (bit 0 = left, bit 1 = right, bit 2 = middle)
-        // Byte 1: X movement (signed)
-        // Byte 2: Y movement (signed)
-        // Some devices have additional bytes for wheel, etc.
+        // Debug: Log raw data for first few reports or when buttons change
+        const prevState = this.deviceButtonStates.get(deviceId) || { left: false, right: false, middle: false, raw: 0 };
+        const rawByte0 = data.getUint8(0);
+        const rawByte1 = data.byteLength > 1 ? data.getUint8(1) : 0;
+        const rawByte2 = data.byteLength > 2 ? data.getUint8(2) : 0;
+        const rawByte3 = data.byteLength > 3 ? data.getUint8(3) : 0;
         
-        const buttons = data.getUint8(0);
+        // Log when any button byte changes (for debugging button mapping)
+        if (rawByte0 !== prevState.raw || rawByte1 !== prevState.rawByte1 || rawByte2 !== prevState.rawByte2) {
+            console.log(`HID Report [${deviceId}]: bytes=[${rawByte0}, ${rawByte1}, ${rawByte2}, ${rawByte3}] len=${data.byteLength} reportId=${reportId}`);
+        }
         
-        const leftButton = (buttons & 0x01) !== 0;
-        const rightButton = (buttons & 0x02) !== 0;
-        const middleButton = (buttons & 0x04) !== 0;
+        // Gun4IR in joystick mode has buttons in different positions
+        // Try to detect the format based on data length and report ID
+        let buttons, leftButton, rightButton, middleButton;
         
-        // Get previous button state to detect press events
-        const prevState = this.deviceButtonStates.get(deviceId) || { left: false, right: false, middle: false };
+        if (data.byteLength >= 8) {
+            // Gun4IR joystick mode (reportId 7 for 15-byte reports)
+            // Byte 0: Buttons (trigger=bit0, A=bit1, B=bit2, etc.)
+            buttons = rawByte0;
+            leftButton = (buttons & 0x01) !== 0;
+            rightButton = (buttons & 0x02) !== 0;
+            middleButton = (buttons & 0x04) !== 0;
+            
+            // Also check if buttons might be in a different byte (some Gun4IR configs)
+            // If byte 0 is always 0 but byte 1 has button data
+            if (buttons === 0 && rawByte1 !== 0) {
+                buttons = rawByte1;
+                leftButton = (buttons & 0x01) !== 0;
+                rightButton = (buttons & 0x02) !== 0;
+                middleButton = (buttons & 0x04) !== 0;
+            }
+        } else {
+            // Standard HID mouse report format:
+            // Byte 0: Button state (bit 0 = left, bit 1 = right, bit 2 = middle)
+            buttons = rawByte0;
+            leftButton = (buttons & 0x01) !== 0;
+            rightButton = (buttons & 0x02) !== 0;
+            middleButton = (buttons & 0x04) !== 0;
+        }
         
         // Detect button press events (transition from false to true)
         const leftPressed = leftButton && !prevState.left;
         const rightPressed = rightButton && !prevState.right;
         const middlePressed = middleButton && !prevState.middle;
         
-        // Update stored state (include raw for debug logging comparison)
-        this.deviceButtonStates.set(deviceId, { left: leftButton, right: rightButton, middle: middleButton, raw: buttons });
+        // Update stored state (include raw bytes for debug logging comparison)
+        this.deviceButtonStates.set(deviceId, { left: leftButton, right: rightButton, middle: middleButton, raw: rawByte0, rawByte1, rawByte2 });
         
         // Parse X/Y coordinates
         let x = 0, y = 0;

@@ -122,6 +122,35 @@ export class MenuBuilder {
     }
 
     /**
+     * Create a titled section container
+     * @param {Object} config - Section configuration
+     * @param {string} config.title - Section title
+     * @param {string} config.titleStyle - Optional title CSS
+     * @param {string} config.style - Optional container CSS
+     * @returns {HTMLElement} Section container element
+     */
+    createSection(config = {}) {
+        const { 
+            title, 
+            titleStyle = 'color: #888; margin-bottom: 10px;',
+            style = 'margin-top: 20px;'
+        } = config;
+        
+        const section = document.createElement('div');
+        section.className = 'menu-section';
+        section.style.cssText = style;
+        
+        if (title) {
+            const titleEl = document.createElement('h4');
+            titleEl.textContent = title;
+            titleEl.style.cssText = titleStyle;
+            section.appendChild(titleEl);
+        }
+        
+        return section;
+    }
+
+    /**
      * Show a screen in the UI layer
      * @param {HTMLElement} screen - The screen element
      */
@@ -135,6 +164,138 @@ export class MenuBuilder {
      */
     clear() {
         this.uiLayer.innerHTML = '';
+    }
+
+    /**
+     * Create a difficulty selection screen
+     * @param {Object} config - Configuration
+     * @param {string} config.title - Screen title (default: 'SELECT DIFFICULTY')
+     * @param {Array} config.difficulties - Array of { id, label, color? } (default: beginner/medium/hard)
+     * @param {Function} config.onSelect - Called with difficulty id when selected
+     * @param {Function} config.onBack - Called when back button pressed
+     * @param {string} config.backLabel - Back button text (default: 'BACK')
+     */
+    showDifficultySelect(config = {}) {
+        const {
+            title = 'SELECT DIFFICULTY',
+            difficulties = [
+                { id: 'beginner', label: 'BEGINNER' },
+                { id: 'medium', label: 'MEDIUM' },
+                { id: 'hard', label: 'HARD' }
+            ],
+            onSelect,
+            onBack,
+            backLabel = 'BACK'
+        } = config;
+
+        const screen = this.createScreen({ title });
+        
+        const diffButtons = difficulties.map(diff => ({
+            id: `btn-diff-${diff.id}`,
+            text: diff.label,
+            className: 'diff-btn',
+            style: diff.color ? `background: ${diff.color};` : '',
+            onClick: () => onSelect && onSelect(diff.id)
+        }));
+        
+        const buttonGroup = this.createButtonGroup(diffButtons);
+        screen.appendChild(buttonGroup);
+        
+        if (onBack) {
+            const backBtn = this.createButton({
+                id: 'btn-back',
+                text: backLabel,
+                style: 'margin-top: 20px;',
+                onClick: onBack
+            });
+            screen.appendChild(backBtn);
+        }
+        
+        this.show(screen);
+        return screen;
+    }
+
+    /**
+     * Create a grid menu (for practice mode, mini-game selection, etc.)
+     * @param {Object} config - Configuration
+     * @param {string} config.title - Screen title
+     * @param {string} config.subtitle - Optional subtitle
+     * @param {Array} config.sections - Array of { title, buttons: [{ id, text, data, onClick }] }
+     * @param {Function} config.onBack - Called when back button pressed
+     */
+    showGridMenu(config = {}) {
+        const { title, subtitle, sections = [], onBack } = config;
+
+        const screen = document.createElement('div');
+        screen.className = 'screen';
+        
+        if (title) {
+            const h1 = document.createElement('h1');
+            h1.textContent = title;
+            screen.appendChild(h1);
+        }
+        
+        if (subtitle) {
+            const h3 = document.createElement('h3');
+            h3.textContent = subtitle;
+            screen.appendChild(h3);
+        }
+        
+        const grid = document.createElement('div');
+        grid.className = 'menu-grid';
+        grid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0;';
+        
+        sections.forEach(section => {
+            const sectionEl = document.createElement('div');
+            sectionEl.className = 'menu-section';
+            sectionEl.style.cssText = 'background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;';
+            
+            if (section.title) {
+                const sectionTitle = document.createElement('h4');
+                sectionTitle.textContent = section.title;
+                sectionTitle.style.cssText = 'margin: 0 0 10px 0; color: var(--secondary-color, #00ccff);';
+                sectionEl.appendChild(sectionTitle);
+            }
+            
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.cssText = 'display: flex; flex-direction: column; gap: 5px;';
+            
+            (section.buttons || []).forEach(btn => {
+                const button = this.createButton({
+                    id: btn.id,
+                    text: btn.text,
+                    className: btn.className || 'grid-btn',
+                    style: btn.style || 'font-size: 0.9rem; padding: 8px 12px;',
+                    onClick: btn.onClick
+                });
+                
+                // Store data attributes if provided
+                if (btn.data) {
+                    Object.entries(btn.data).forEach(([key, value]) => {
+                        button.dataset[key] = value;
+                    });
+                }
+                
+                buttonContainer.appendChild(button);
+            });
+            
+            sectionEl.appendChild(buttonContainer);
+            grid.appendChild(sectionEl);
+        });
+        
+        screen.appendChild(grid);
+        
+        if (onBack) {
+            const backBtn = this.createButton({
+                id: 'btn-back',
+                text: 'BACK',
+                onClick: onBack
+            });
+            screen.appendChild(backBtn);
+        }
+        
+        this.show(screen);
+        return screen;
     }
 }
 
@@ -449,6 +610,141 @@ export class OverlayBuilder {
         if (autoAdvance && onNext) {
             setTimeout(onNext, autoAdvance);
         }
+    }
+
+    /**
+     * Show a stage/round result screen with optional multiplayer support
+     * @param {Object} config
+     * @param {boolean} config.success - Whether the stage was successful
+     * @param {string} config.title - Override title (default: 'STAGE CLEAR!' or 'LIFE LOST!')
+     * @param {string} config.info - Optional info text below title (e.g., difficulty, combo info)
+     * @param {Array} config.stats - Single player stats: [{ label, value, color?, isTotal? }]
+     * @param {Object} config.multiplayer - Multiplayer config (if present, shows per-player stats)
+     * @param {Array} config.multiplayer.players - Array of { name, color, score, hits, shots, accuracy, totalScore }
+     * @param {string} config.multiplayer.mode - 'versus' or 'coop'
+     * @param {number} config.multiplayer.teamScore - Team score for coop mode
+     * @param {string} config.multiplayer.teamInfo - Additional team info text
+     * @param {Function} config.onNext - Called when NEXT is clicked
+     */
+    showStageResult(config = {}) {
+        const { 
+            success = true, 
+            title,
+            info = '',
+            stats = [], 
+            multiplayer = null,
+            onNext 
+        } = config;
+
+        const defaultTitle = success ? 'STAGE CLEAR!' : 'LIFE LOST!';
+        const displayTitle = title || defaultTitle;
+        const color = success ? '#00ccff' : '#ff0055';
+        
+        // Info text (difficulty, combo, etc.)
+        const infoHTML = info ? `<div style="color: #888; font-size: 0.9em; margin-bottom: 15px;">${info}</div>` : '';
+
+        let contentHTML = '';
+
+        if (multiplayer) {
+            // Multiplayer stats display
+            contentHTML = this._buildMultiplayerStatsHTML(multiplayer);
+        } else if (stats.length > 0) {
+            // Single player stats display
+            contentHTML = '<div class="stats-breakdown">';
+            stats.forEach(stat => {
+                const rowClass = stat.isTotal ? 'stat-row total' : 'stat-row';
+                const style = stat.color ? `color: ${stat.color};` : '';
+                const fontSize = stat.isTotal ? 'font-size: 1.2em;' : '';
+                contentHTML += `
+                    <div class="${rowClass}" style="${style} ${fontSize}">
+                        <span>${stat.label}</span>
+                        <span>${stat.value}</span>
+                    </div>
+                `;
+                if (stat.dividerAfter) {
+                    contentHTML += '<div class="stat-divider" style="margin: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.3);"></div>';
+                }
+            });
+            contentHTML += '</div>';
+        }
+
+        this.uiLayer.innerHTML = `
+            <div class="screen result" style="border-color: ${color}">
+                <h1 style="color: ${color}">${displayTitle}</h1>
+                ${infoHTML}
+                ${contentHTML}
+                ${onNext ? '<button id="btn-next" style="margin-top: 20px;">NEXT</button>' : ''}
+            </div>
+        `;
+
+        if (onNext) {
+            const btn = document.getElementById('btn-next');
+            btn.onclick = onNext;
+            btn.focus();
+        }
+    }
+
+    /**
+     * Build multiplayer stats HTML for stage result
+     * @private
+     */
+    _buildMultiplayerStatsHTML(config) {
+        const { players = [], mode = 'versus', teamScore, teamInfo } = config;
+        
+        // Determine winner in versus mode
+        let winnerHTML = '';
+        if (mode === 'versus' && players.length >= 2) {
+            const sorted = [...players].sort((a, b) => b.score - a.score);
+            if (sorted[0].score > sorted[1].score) {
+                winnerHTML = `<div style="font-size: 1.3em; color: ${sorted[0].color}; margin: 10px 0;">🏆 ${sorted[0].name} WINS THIS ROUND!</div>`;
+            } else if (sorted[0].score === sorted[1].score) {
+                winnerHTML = `<div style="font-size: 1.3em; color: #ffff00; margin: 10px 0;">🤝 TIE!</div>`;
+            }
+        }
+
+        let playersHTML = '<div class="stats-breakdown" style="display: flex; gap: 20px; justify-content: center;">';
+        
+        players.forEach(player => {
+            const accuracy = player.shots > 0 
+                ? ((player.hits / player.shots) * 100).toFixed(1) 
+                : '0.0';
+            
+            playersHTML += `
+                <div style="flex: 1; max-width: 200px; padding: 10px; border: 2px solid ${player.color}; border-radius: 10px;">
+                    <h3 style="color: ${player.color}; margin: 0 0 10px 0;">${player.name}</h3>
+                    <div class="stat-row">
+                        <span>Score:</span>
+                        <span style="color: #ffff00;">${player.score}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Hits:</span>
+                        <span>${player.hits}/${player.shots}</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>Accuracy:</span>
+                        <span>${accuracy}%</span>
+                    </div>
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
+                        <span style="color: #00ff00;">TOTAL: ${player.totalScore}</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        playersHTML += '</div>';
+
+        // Add team stats for coop mode
+        let teamHTML = '';
+        if (mode === 'coop' && teamScore !== undefined) {
+            teamHTML = `
+                <div style="margin-top: 15px; padding: 10px; background: rgba(0,255,0,0.1); border-radius: 10px;">
+                    <div style="font-size: 1.2em; color: #00ff00;">TEAM SCORE: ${teamScore}</div>
+                    ${teamInfo ? `<div style="font-size: 0.9em; color: #888; margin-top: 5px;">${teamInfo}</div>` : ''}
+                </div>
+            `;
+        }
+
+        return playersHTML + winnerHTML + teamHTML;
     }
 
     /**
