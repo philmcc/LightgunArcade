@@ -36,7 +36,7 @@ Lightguns are physical devices with unique characteristics:
 **Design Implications**:
 - Make targets reasonably sized (not pixel-perfect)
 - Include natural breaks in gameplay (round transitions, cutscenes)
-- Consider "aim assist" options for accessibility
+
 
 ### 1.2 Immediacy is Everything
 
