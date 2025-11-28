@@ -17,6 +17,8 @@ export class GunCursorManager {
         this.inGame = false;
         this.showCursorsInGame = true; // User setting for in-game cursor visibility
         
+        // Track forced hidden state per gun (for single player mode)
+        this.forcedHiddenGuns = new Set();
     }
 
     /**
@@ -111,12 +113,12 @@ export class GunCursorManager {
         
         // Determine if cursor should be visible:
         // - Gun must be connected
-        // - Not forced hidden (single player mode)
+        // - Not forced hidden (single player mode) - check both Set and DOM attribute
         // - In menus (not in game): always show cursor
         // - In game: check per-gun showCursor setting
         const isConnected = gun && gun.state.isConnected;
         const gunCursorEnabled = gun?.config?.showCursor !== false; // Default to true
-        const forcedHidden = cursor.dataset.forcedHidden === 'true';
+        const forcedHidden = this.forcedHiddenGuns.has(gunIndex) || cursor.dataset.forcedHidden === 'true';
         
         let shouldShow = false;
         if (isConnected && !forcedHidden) {
@@ -169,7 +171,7 @@ export class GunCursorManager {
             const gun = this.gunManager.guns[gunIndex];
             const isConnected = gun && gun.state.isConnected;
             const gunCursorEnabled = gun?.config?.showCursor !== false;
-            const forcedHidden = cursor.dataset.forcedHidden === 'true';
+            const forcedHidden = this.forcedHiddenGuns.has(gunIndex) || cursor.dataset.forcedHidden === 'true';
             
             let shouldShow = false;
             if (isConnected && !forcedHidden) {
@@ -213,9 +215,16 @@ export class GunCursorManager {
      * @param {boolean} visible - Whether cursor should be visible
      */
     setCursorVisible(gunIndex, visible) {
+        // Track in Set (works even if cursor doesn't exist yet)
+        if (visible) {
+            this.forcedHiddenGuns.delete(gunIndex);
+        } else {
+            this.forcedHiddenGuns.add(gunIndex);
+        }
+        
+        // Also update DOM element if it exists
         const cursor = this.cursorElements.get(gunIndex);
         if (cursor) {
-            // Store forced visibility state
             cursor.dataset.forcedHidden = visible ? 'false' : 'true';
             if (!visible) {
                 cursor.style.display = 'none';
@@ -227,6 +236,10 @@ export class GunCursorManager {
      * Reset all cursor visibility overrides (call when returning to menu or multiplayer)
      */
     resetCursorVisibility() {
+        // Clear the forced hidden Set
+        this.forcedHiddenGuns.clear();
+        
+        // Also clear DOM attributes
         this.cursorElements.forEach((cursor) => {
             cursor.dataset.forcedHidden = 'false';
         });

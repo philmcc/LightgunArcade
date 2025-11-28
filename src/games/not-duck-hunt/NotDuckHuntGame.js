@@ -404,13 +404,17 @@ export class Game extends BaseGame {
         const gunManager = this.system?.gunManager;
         if (!gunManager || !gunManager.cursorManager) return;
         
+        const cursorManager = gunManager.cursorManager;
+        
         // Hide all gun cursors except the active one
-        gunManager.guns.forEach((gun, index) => {
-            if (gun.isAssigned) {
-                const shouldShow = (index === activeGunIndex);
-                gunManager.cursorManager.setCursorVisible(index, shouldShow);
-            }
-        });
+        // Iterate through all possible gun indices
+        for (let i = 0; i < gunManager.guns.length; i++) {
+            const shouldShow = (i === activeGunIndex);
+            cursorManager.setCursorVisible(i, shouldShow);
+        }
+        
+        // Force update all cursor visibility to apply changes
+        cursorManager.updateAllCursorVisibility();
     }
 
     showPauseMenu() {
