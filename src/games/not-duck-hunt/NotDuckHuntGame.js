@@ -593,8 +593,21 @@ export class Game extends BaseGame {
         }
     }
 
-    updateAmmoDisplay(shots) {
-        this.ui.hud.updateAmmo(shots);
+    updateAmmoDisplay(shots, playerIndex = null) {
+        if (this.isMultiplayer() && playerIndex !== null) {
+            // Update per-player ammo in multiplayer HUD
+            this.updatePlayerAmmo(playerIndex, shots);
+        } else {
+            this.ui.hud.updateAmmo(shots);
+        }
+    }
+    
+    updatePlayerAmmo(playerIndex, shots) {
+        // Update ammo display for specific player in multiplayer HUD
+        const ammoEl = document.getElementById(`player-${playerIndex}-ammo`);
+        if (ammoEl) {
+            ammoEl.textContent = shots;
+        }
     }
 
     updateScoreDisplay() {

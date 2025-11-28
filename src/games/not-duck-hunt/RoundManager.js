@@ -27,9 +27,13 @@ export class RoundManager {
         // Current target tracking
         this.activeTargets = [];
         this.shotsRemaining = 3;
+        this.playerAmmo = [3, 3]; // Per-player ammo for multiplayer
         this.waitingForNewTarget = false;
         this.newTargetDelay = 1.5; // seconds
         this.newTargetTimer = 0;
+        
+        // For duel mode target assignment
+        this.nextDuelPlayer = 0;
 
         // Bonus round tracking
         this.isBonusRound = false;
@@ -97,9 +101,11 @@ export class RoundManager {
         this.targetsMissed = 0;
         this.activeTargets = [];
         this.shotsRemaining = 3;
+        this.playerAmmo = [3, 3];
         this.waitingForNewTarget = false;
         this.isBonusRound = false;
         this.targetHistory = [];
+        this.nextDuelPlayer = 0; // Reset duel target assignment
 
         // Reset combo and scoring
         this.combo = 0;
@@ -263,8 +269,17 @@ export class RoundManager {
 
         this.currentTargetIndex += numTargets;
         this.shotsRemaining = 3;
+        this.playerAmmo = [3, 3]; // Reset per-player ammo
         this.waitingForNewTarget = false;
         this.currentSetHits = 0;  // Track hits in this target set for chain bonus
+        
+        // Update ammo display
+        if (this.game.isMultiplayer()) {
+            this.game.updateAmmoDisplay(3, 0);
+            this.game.updateAmmoDisplay(3, 1);
+        } else {
+            this.game.updateAmmoDisplay(3);
+        }
 
         // Add pending entries to history for new targets
         for (let i = 0; i < numTargets; i++) {
@@ -330,10 +345,11 @@ export class RoundManager {
         // Track spawn time for quick kill bonus
         target.spawnTime = performance.now();
         
-        // For duel mode: assign target to a player
+        // For duel mode: assign target to a player (alternate across ALL targets, not just within set)
         if (this.multiplayerMode === 'duel' && this.game.isMultiplayer()) {
-            target.assignedPlayer = index % 2;  // Alternate between players
+            target.assignedPlayer = this.nextDuelPlayer;
             target.playerColor = this.game.players.getPlayer(target.assignedPlayer)?.colors.primary || '#fff';
+            this.nextDuelPlayer = (this.nextDuelPlayer + 1) % 2; // Alternate for next target
         }
 
         return target;
@@ -346,12 +362,23 @@ export class RoundManager {
             return;
         }
 
-        if (this.shotsRemaining <= 0 || this.waitingForNewTarget) {
+        // Check ammo - per-player in multiplayer, shared in single player
+        const ammoRemaining = this.game.isMultiplayer() 
+            ? this.playerAmmo[playerIndex] 
+            : this.shotsRemaining;
+            
+        if (ammoRemaining <= 0 || this.waitingForNewTarget) {
             return;
         }
 
-        this.shotsRemaining--;
-        this.game.updateAmmoDisplay(this.shotsRemaining);
+        // Deduct ammo
+        if (this.game.isMultiplayer()) {
+            this.playerAmmo[playerIndex]--;
+            this.game.updateAmmoDisplay(this.playerAmmo[playerIndex], playerIndex);
+        } else {
+            this.shotsRemaining--;
+            this.game.updateAmmoDisplay(this.shotsRemaining);
+        }
 
         const hitResult = this.checkHits(x, y, playerIndex);
 
@@ -366,14 +393,18 @@ export class RoundManager {
             }
         }
 
-        // Check if all shots used
-        if (this.shotsRemaining <= 0 && this.activeTargets.length > 0) {
-            // All shots missed - show dog laugh
+        // Check if all shots used - only show dog laugh if there are still LIVE (non-hit) targets
+        const liveTargets = this.activeTargets.filter(t => !t.isHit && !t.isEscaped);
+        const totalAmmoRemaining = this.game.isMultiplayer()
+            ? this.playerAmmo.reduce((a, b) => a + b, 0)
+            : this.shotsRemaining;
+            
+        if (totalAmmoRemaining <= 0 && liveTargets.length > 0) {
+            // All shots used and there are still live targets - show dog laugh
             this.game.showDogLaugh();
-            // Don't increment targetsMissed here - it will be counted when targets escape off-screen
 
-            // Mark all active targets as escaped
-            this.activeTargets.forEach(t => t.escape());
+            // Mark all live targets as escaped
+            liveTargets.forEach(t => t.escape());
 
             // Wait for targets to escape, then spawn new one
             this.waitingForNewTarget = true;

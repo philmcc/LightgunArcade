@@ -258,10 +258,16 @@ export class HUDBuilder {
             section.id = `player-hud-${index}`;
             section.style.setProperty('--player-color', player.colors.primary);
 
+            // Include per-player ammo if specified
+            const ammoHtml = config.ammo !== undefined 
+                ? `<div class="player-ammo" id="player-${index}-ammo-container">AMMO: <span id="player-${index}-ammo">${config.ammo}</span></div>`
+                : '';
+
             section.innerHTML = `
                 <div class="player-label">P${index + 1}</div>
                 <div class="player-score" id="p${index}-score">${player.score}</div>
                 <div class="player-lives" id="p${index}-lives">♥ ${player.lives}</div>
+                ${ammoHtml}
             `;
 
             hud.appendChild(section);
@@ -269,6 +275,9 @@ export class HUDBuilder {
             // Store element references
             this.elements[`p${index}-score`] = section.querySelector(`#p${index}-score`);
             this.elements[`p${index}-lives`] = section.querySelector(`#p${index}-lives`);
+            if (config.ammo !== undefined) {
+                this.elements[`p${index}-ammo`] = section.querySelector(`#player-${index}-ammo`);
+            }
         });
 
         // Add center elements (round, shared info)
@@ -278,15 +287,6 @@ export class HUDBuilder {
             centerEl.innerHTML = `<span id="round-display">${config.round}</span>`;
             hud.appendChild(centerEl);
             this.elements.round = centerEl.querySelector('#round-display');
-        }
-
-        // Add ammo if specified
-        if (config.ammo !== undefined) {
-            const ammoEl = document.createElement('div');
-            ammoEl.style.cssText = 'position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font-size: 24px; color: #fff; font-weight: bold; text-shadow: 2px 2px 0 #000;';
-            ammoEl.innerHTML = `AMMO: <span id="ammo-display">${'I'.repeat(config.ammo)}</span>`;
-            hud.appendChild(ammoEl);
-            this.elements.ammo = ammoEl.querySelector('#ammo-display');
         }
 
         this.uiLayer.appendChild(hud);
