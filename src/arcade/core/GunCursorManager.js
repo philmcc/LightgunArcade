@@ -86,6 +86,9 @@ export class GunCursorManager {
             ">P${gunIndex + 1}</div>
         `;
 
+        // Initialize forced hidden state
+        cursor.dataset.forcedHidden = 'false';
+        
         this.container.appendChild(cursor);
         this.cursorElements.set(gunIndex, cursor);
     }

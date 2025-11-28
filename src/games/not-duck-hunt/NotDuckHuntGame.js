@@ -105,6 +105,12 @@ export class Game extends BaseGame {
             this.state = "PLAYING";
             // Hide cursors for gameplay (SDK method)
             this.setInGame(true);
+            
+            // Re-apply single player cursor hiding after setInGame
+            if (!this.isMultiplayer() && this.activeGunIndex !== null) {
+                this.setSinglePlayerCursors(this.activeGunIndex);
+            }
+            
             this.hidePauseMenu();
         }
     }
@@ -502,6 +508,12 @@ export class Game extends BaseGame {
             onComplete: () => {
                 this.state = "PLAYING";
                 this.setInGame(true);
+                
+                // Re-apply single player cursor hiding after setInGame
+                if (!this.isMultiplayer() && this.activeGunIndex !== null) {
+                    this.setSinglePlayerCursors(this.activeGunIndex);
+                }
+                
                 this.showHUD();
                 callback();
             }
@@ -519,6 +531,12 @@ export class Game extends BaseGame {
             onComplete: () => {
                 this.state = "PLAYING";
                 this.setInGame(true);
+                
+                // Re-apply single player cursor hiding after setInGame
+                if (!this.isMultiplayer() && this.activeGunIndex !== null) {
+                    this.setSinglePlayerCursors(this.activeGunIndex);
+                }
+                
                 this.showHUD();
                 callback();
             }
