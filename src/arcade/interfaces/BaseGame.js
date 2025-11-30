@@ -6,6 +6,7 @@ import { SettingsScreen } from '../sdk/SettingsScreen.js';
 import { AssetLoader } from '../sdk/AssetLoader.js';
 import { PlayerManager } from '../core/PlayerManager.js';
 import { PlayerSelectScreen } from '../sdk/PlayerSelectScreen.js';
+import { GameServices } from '../sdk/GameServices.js';
 
 /**
  * Abstract base class for all Lightgun Arcade games.
@@ -16,10 +17,11 @@ import { PlayerSelectScreen } from '../sdk/PlayerSelectScreen.js';
  * - this.uiLayer - DOM element for UI overlays
  * - this.input - InputManager for mouse/touch/gun input
  * - this.sound - SoundManager for audio
- * - this.highScores - Per-game high score manager
+ * - this.highScores - Per-game high score manager (local)
  * - this.settings - User settings reference
  * - this.ui - UI component builders (menu, hud, overlay, highScores)
  * - this.assets - AssetLoader for loading images, audio, JSON
+ * - this.services - GameServices for online scores, leaderboards, sessions
  * - Convenience methods for system integration
  */
 export class BaseGame {
@@ -64,6 +66,9 @@ export class BaseGame {
 
         // Asset loader (per-game instance)
         this.assets = new AssetLoader();
+
+        // Online services (scores, leaderboards, sessions, activity)
+        this.services = new GameServices(system);
 
         // Multiplayer support
         this.players = new PlayerManager();
@@ -223,21 +228,82 @@ export class BaseGame {
     }
 
     /**
-     * Save a score to the global arcade high scores.
+     * Save a score to the global arcade high scores (local only).
+     * For online scores, use this.services.submitScore() instead.
      * @param {string} name - Player name
      * @param {number} score - Score value
      * @param {string} difficulty - Difficulty level
+     * @deprecated Use submitScore() for full online + local submission
      */
     saveGlobalScore(name, score, difficulty) {
         this.system.globalHighScores.addScore(this._gameId, name, score, difficulty);
     }
 
     /**
+     * Submit a score (online + local). This is the recommended way to save scores.
+     * Handles online submission, local storage, and activity feed posting.
+     * 
+     * @param {number} score - Score value
+     * @param {Object} options
+     * @param {string} options.mode - Game mode (default: 'arcade')
+     * @param {string} options.difficulty - Difficulty level (default: 'normal')
+     * @param {Object} options.metadata - Additional data (accuracy, combos, etc.)
+     * @param {string} options.playerName - Override player name
+     * @returns {Promise<{score: Object, isPersonalBest: boolean}>}
+     */
+    async submitScore(score, options = {}) {
+        return this.services.submitScore(this._gameId, score, options);
+    }
+
+    /**
+     * Start a game session. Call this when gameplay begins.
+     * @param {Object} options
+     * @param {string} options.mode - Game mode
+     * @param {string} options.difficulty - Difficulty level
+     * @returns {Promise<Object>} Session object
+     */
+    async startGameSession(options = {}) {
+        return this.services.startSession(this._gameId, options);
+    }
+
+    /**
+     * End the current game session. Call this when gameplay ends.
+     * @param {Object} results - Session results
+     * @returns {Promise<Object>} Completed session
+     */
+    async endGameSession(results = {}) {
+        return this.services.endSession(results);
+    }
+
+    /**
+     * Complete game flow: end session and submit score in one call.
+     * This is the easiest way to handle game completion.
+     * 
+     * @param {number} score - Final score
+     * @param {Object} options
+     * @param {string} options.mode - Game mode
+     * @param {string} options.difficulty - Difficulty level
+     * @param {Object} options.metadata - Additional stats
+     * @returns {Promise<{session: Object, scoreResult: Object}>}
+     */
+    async completeGame(score, options = {}) {
+        return this.services.completeGame(this._gameId, score, options);
+    }
+
+    /**
      * Get the current user profile.
-     * @returns {Object} User object with name, id, isGuest
+     * @returns {Object} User object with username, display_name, avatar_url, etc.
      */
     getCurrentUser() {
         return this.system.auth.getCurrentUser();
+    }
+
+    /**
+     * Check if the current user is a guest (not logged in)
+     * @returns {boolean}
+     */
+    isGuest() {
+        return this.system.auth.isGuest();
     }
 
     /**

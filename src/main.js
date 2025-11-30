@@ -13,8 +13,19 @@ const arcade = new ArcadeSystem(canvas, uiLayer);
 arcade.registerGame(PointGunGame);
 arcade.registerGame(NotDuckHuntGame);
 
-// Show arcade menu
-arcade.showArcadeMenu();
+// Wait for init to complete before showing menu
+async function start() {
+  // Show loading state
+  uiLayer.innerHTML = '<div class="screen"><h1>LOADING...</h1></div>';
+  
+  // Wait for arcade to fully initialize (including auth)
+  await arcade.init();
+  
+  // Now show arcade menu with correct auth state
+  arcade.showArcadeMenu();
+}
+
+start();
 
 // Game loop
 let lastTime = 0;

@@ -34,6 +34,7 @@ export { PlayerManager } from '../core/PlayerManager.js';
 
 // Services (re-export from services folder)
 export { GameHighScores } from '../services/GameHighScores.js';
+export { GameServices } from './GameServices.js';
 
 // Shared utilities (re-export from shared folder)
 export { InputManager } from '../../shared/InputManager.js';
