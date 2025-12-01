@@ -1,7 +1,7 @@
 # Lightgun Arcade SDK Reference
 
-**Version**: 1.2  
-**Last Updated**: 2025-11-30  
+**Version**: 1.3  
+**Last Updated**: 2025-12-01  
 **Status**: Implementation Guide
 
 This document describes the SDK components available for game development. All games extend `BaseGame` and have access to these features automatically.
@@ -720,6 +720,81 @@ const { entries } = await this.services.getFriendsLeaderboard(gameId, {
     difficulty: 'normal'
 });
 ```
+
+---
+
+## Social Features (New in 1.3)
+
+The SDK provides comprehensive social features through the platform services.
+
+### Online Presence
+
+Track and display friend online status:
+
+```javascript
+// Get online status for a user
+const status = this.system.friends.getOnlineStatus(userId);
+// { isOnline: true, status: 'playing', currentGame: 'not-duck-hunt', currentGameName: 'Not Duck Hunt' }
+
+// Get all online friends
+const onlineFriends = await this.system.friends.getOnlineFriends();
+
+// Subscribe to status changes
+const unsubscribe = this.system.friends.onOnlineStatusChange((onlineUsers) => {
+    // Update UI with new online status
+});
+```
+
+Presence is automatically updated when games start/end.
+
+### Notifications
+
+Real-time notifications for social events:
+
+```javascript
+// Show a toast notification
+this.system.notifications.showToast('Friend request accepted!', 'success', {
+    duration: 5000,
+    icon: '🤝'
+});
+
+// Subscribe to notifications
+this.system.notifications.onNotification((notification) => {
+    // notification.type: 'friend_request', 'friend_accepted', 'score_beat'
+    console.log('New notification:', notification);
+});
+
+// Get pending notification count
+const count = await this.system.notifications.getPendingCount();
+```
+
+### Activity Feed Integration
+
+Scores are automatically posted to the activity feed when:
+- A personal best is achieved (single player)
+- A personal best is achieved in multiplayer
+
+```javascript
+// Manual activity posting (if needed)
+await this.system.activity.postScoreActivity(gameId, score, metadata, isPersonalBest);
+await this.system.activity.postGamePlayedActivity(gameId, sessionData);
+```
+
+### Viewing User Profiles
+
+The platform provides a `ProfileViewScreen` for viewing other users:
+
+```javascript
+// From ArcadeSystem (handled automatically in leaderboards/friends screens)
+this.system.showUserProfile(userId, 'LEADERBOARDS'); // returnTo state
+```
+
+The profile view shows:
+- User info (avatar, username, bio)
+- Online status and current game
+- User stats (games played, playtime)
+- Recent activity
+- Friend actions (add/remove/block)
 
 ---
 

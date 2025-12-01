@@ -10,6 +10,7 @@ import { FriendService } from '../services/FriendService.js';
 import { ActivityService } from '../services/ActivityService.js';
 import { SessionService } from '../services/SessionService.js';
 import { StatsService } from '../services/StatsService.js';
+import { NotificationService } from '../services/NotificationService.js';
 import { GunManager } from './GunManager.js';
 import { LocalPlayersManager } from './LocalPlayersManager.js';
 import { PlayerManager } from './PlayerManager.js';
@@ -20,6 +21,7 @@ import { StatsScreen } from '../ui/StatsScreen.js';
 import { ActivityFeedScreen } from '../ui/ActivityFeedScreen.js';
 import { LeaderboardScreen } from '../ui/LeaderboardScreen.js';
 import { EditProfileScreen } from '../ui/EditProfileScreen.js';
+import { ProfileViewScreen } from '../ui/ProfileViewScreen.js';
 
 export class ArcadeSystem {
     constructor(canvas, uiLayer) {
@@ -41,6 +43,7 @@ export class ArcadeSystem {
         this.activity = new ActivityService(this.auth);
         this.sessions = new SessionService(this.auth);
         this.stats = new StatsService(this.auth);
+        this.notifications = new NotificationService(this.auth);
         
         // Gun management
         this.gunManager = new GunManager();
@@ -65,8 +68,20 @@ export class ArcadeSystem {
         await this.auth.waitForInit();
         
         // Listen for auth state changes to update UI
-        this.auth.addListener(() => {
+        this.auth.addListener(async () => {
             console.log('ArcadeSystem: Auth state changed, current state:', this.state);
+            
+            // Initialize or cleanup social services based on auth state
+            if (!this.auth.isGuest()) {
+                // User logged in - initialize presence and notifications
+                await this.friends.initPresence();
+                await this.notifications.init();
+            } else {
+                // User logged out - cleanup
+                this.friends.cleanupPresence();
+                this.notifications.cleanup();
+            }
+            
             // If we're on the login screen and user just signed in, go to profile
             if (this.state === 'LOGIN' && !this.auth.isGuest()) {
                 console.log('ArcadeSystem: User signed in, showing profile');
@@ -438,6 +453,9 @@ export class ArcadeSystem {
             // In game - cursor visibility controlled by setting
             this.gunManager.setInGame(true);
             
+            // Update presence to show playing this game
+            this.friends.updateCurrentGame(gameId, gameRegistration.name);
+            
             // Instantiate the game class
             this.currentGame = new gameRegistration.GameClass(this.canvas, this.uiLayer, this);
 
@@ -446,6 +464,7 @@ export class ArcadeSystem {
 
         } catch (error) {
             console.error("Failed to launch game:", error);
+            this.friends.updateCurrentGame(null); // Clear game presence on error
             this.showArcadeMenu(); // Fallback to menu on error
             // TODO: Show error notification to user
         }
@@ -461,6 +480,9 @@ export class ArcadeSystem {
             }
             this.currentGame = null;
         }
+        
+        // Clear game presence
+        this.friends.updateCurrentGame(null);
         
         // Leaving game - cursors always visible in menus
         this.gunManager.setInGame(false);
@@ -775,10 +797,47 @@ export class ArcadeSystem {
         const screen = new FriendsScreen(this.uiLayer, {
             friendService: this.friends,
             sessionService: this.sessions,
-            onBack: () => this.showProfile()
+            onBack: () => this.showProfile(),
+            onViewProfile: (userId) => this.showUserProfile(userId, 'FRIENDS')
         });
         
         screen.show();
+    }
+
+    /**
+     * Show another user's profile
+     * @param {string} userId - User ID to view
+     * @param {string} returnTo - State to return to on back (default: PROFILE)
+     */
+    showUserProfile(userId, returnTo = 'PROFILE') {
+        this.state = 'VIEW_PROFILE';
+        
+        const currentUser = this.auth.getCurrentUser();
+        const screen = new ProfileViewScreen(this.uiLayer, {
+            userService: this.users,
+            friendService: this.friends,
+            statsService: this.stats,
+            activityService: this.activity,
+            currentUserId: currentUser?.id,
+            onBack: () => {
+                switch (returnTo) {
+                    case 'FRIENDS':
+                        this.showFriendsScreen();
+                        break;
+                    case 'LEADERBOARDS':
+                        this.showLeaderboards();
+                        break;
+                    case 'ACTIVITY':
+                        this.showActivityFeed();
+                        break;
+                    default:
+                        this.showProfile();
+                }
+            },
+            onViewProfile: (otherUserId) => this.showUserProfile(otherUserId, returnTo)
+        });
+        
+        screen.show(userId);
     }
 
     /**
@@ -811,7 +870,8 @@ export class ArcadeSystem {
             gameRegistry: this.registry,
             currentUserId: user?.id,
             initialGame: gameId,
-            onBack: () => this.showArcadeMenu()
+            onBack: () => this.showArcadeMenu(),
+            onViewProfile: (userId) => this.showUserProfile(userId, 'LEADERBOARDS')
         });
         
         screen.show();

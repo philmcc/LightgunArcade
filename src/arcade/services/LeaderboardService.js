@@ -422,4 +422,14 @@ export class LeaderboardService {
             supabase.removeChannel(channel);
         };
     }
+
+    /**
+     * Get friends-only leaderboard (convenience wrapper)
+     * @param {string} gameId 
+     * @param {Object} options 
+     * @returns {Promise<{entries: Array, total: number, error: Error}>}
+     */
+    async getFriendsLeaderboard(gameId, options = {}) {
+        return this.getLeaderboard(gameId, { ...options, friendsOnly: true });
+    }
 }

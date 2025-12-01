@@ -121,30 +121,68 @@ export class FriendsScreen {
             `;
         }
 
+        // Sort friends: online first, then alphabetically
+        const sortedFriends = [...this.friends].sort((a, b) => {
+            const aOnline = this._getOnlineStatus(a.id);
+            const bOnline = this._getOnlineStatus(b.id);
+            if (aOnline.isOnline && !bOnline.isOnline) return -1;
+            if (!aOnline.isOnline && bOnline.isOnline) return 1;
+            return (a.display_name || a.username).localeCompare(b.display_name || b.username);
+        });
+
         return `
             <div class="friends-list">
-                ${this.friends.map(friend => `
-                    <div class="friend-item" data-user-id="${friend.id}">
-                        <div class="friend-avatar">
-                            ${friend.avatar_url 
-                                ? `<img src="${friend.avatar_url}" alt="${friend.username}">`
-                                : '<span class="avatar-placeholder">👤</span>'
-                            }
-                            <span class="status-dot ${friend.isOnline ? 'online' : 'offline'}"></span>
+                ${sortedFriends.map(friend => {
+                    const onlineStatus = this._getOnlineStatus(friend.id);
+                    const statusText = this._getStatusText(onlineStatus);
+                    
+                    return `
+                        <div class="friend-item" data-user-id="${friend.id}">
+                            <div class="friend-avatar">
+                                ${friend.avatar_url 
+                                    ? `<img src="${friend.avatar_url}" alt="${friend.username}">`
+                                    : '<span class="avatar-placeholder">👤</span>'
+                                }
+                                <span class="status-dot ${onlineStatus.isOnline ? 'online' : 'offline'}"></span>
+                            </div>
+                            <div class="friend-info clickable" data-action="view-profile" data-user-id="${friend.id}">
+                                <span class="friend-name">${friend.display_name || friend.username}</span>
+                                <span class="friend-username">@${friend.username}</span>
+                                <span class="friend-status ${onlineStatus.isOnline ? 'online' : 'offline'}">${statusText}</span>
+                            </div>
+                            <div class="friend-actions">
+                                <button class="btn-small btn-remove" data-action="remove" data-user-id="${friend.id}">
+                                    Remove
+                                </button>
+                            </div>
                         </div>
-                        <div class="friend-info">
-                            <span class="friend-name">${friend.display_name || friend.username}</span>
-                            <span class="friend-username">@${friend.username}</span>
-                        </div>
-                        <div class="friend-actions">
-                            <button class="btn-small btn-remove" data-action="remove" data-user-id="${friend.id}">
-                                Remove
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         `;
+    }
+
+    _getOnlineStatus(userId) {
+        if (this.friendService?.getOnlineStatus) {
+            return this.friendService.getOnlineStatus(userId);
+        }
+        return { isOnline: false, status: 'offline', currentGame: null };
+    }
+
+    _getStatusText(onlineStatus) {
+        if (!onlineStatus?.isOnline) {
+            return 'Offline';
+        }
+        if (onlineStatus.status === 'playing' && onlineStatus.currentGameName) {
+            return `Playing ${onlineStatus.currentGameName}`;
+        }
+        if (onlineStatus.status === 'away') {
+            return 'Away';
+        }
+        if (onlineStatus.status === 'busy') {
+            return 'Busy';
+        }
+        return 'Online';
     }
 
     _renderRequests() {
@@ -449,6 +487,22 @@ export class FriendsScreen {
                         this._showNotification('Friend request cancelled');
                     }
                     await this.loadData();
+                    break;
+
+                case 'view-profile':
+                    this.onViewProfile(data.userId);
+                    break;
+
+                case 'block':
+                    if (confirm('Block this user? They won\'t be able to send you friend requests.')) {
+                        result = await this.friendService.blockUser(data.userId);
+                        if (result.error) {
+                            this._showNotification(result.error.message, 'error');
+                        } else {
+                            this._showNotification('User blocked');
+                        }
+                        await this.loadData();
+                    }
                     break;
             }
         } catch (error) {

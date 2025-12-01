@@ -1,8 +1,8 @@
 # Lightgun Arcade - System Overview
 ## Complete Feature & Capability Specification
 
-**Version**: 1.1  
-**Date**: 2025-11-28  
+**Version**: 1.2  
+**Date**: 2025-12-01  
 **Status**: Specification Document  
 
 ---
@@ -91,17 +91,26 @@
 **Friends System**:
 - Send/accept/decline friend requests
 - Remove friends
-- Block users
+- Block/unblock users
 - Friend list with online status
 - Search by username
 - Suggested friends (mutual friends, recently played with)
 - QR code friend adding (for local arcade setups)
 - Privacy controls (who can send requests, visibility settings)
+- View friend profiles with stats and activity
+
+**Online Presence** (New in v1.2):
+- Real-time online status tracking using Supabase Realtime
+- Status types: online, away, busy, playing
+- Shows what game friends are currently playing
+- Friends list sorted by online status
+- Automatic presence updates when launching/leaving games
 
 **Activity Feed**:
 - Real-time updates of friends' activities
 - Feed items:
   - High scores posted
+  - Personal bests achieved
   - Games played (including who they played with)
   - Achievements unlocked
   - Tournament participation/wins
@@ -111,15 +120,31 @@
 - Comments on activities
 - Filter by friend or game
 - Infinite scroll pagination
+- Automatic posting when personal bests are achieved
+
+**Real-Time Notifications** (New in v1.2):
+- Toast notifications for social events
+- Friend request received notifications
+- Friend request accepted notifications
+- Score beat notifications (when friend beats your score)
+- Configurable notification duration and styling
+
+**User Profile Viewing** (New in v1.2):
+- View other users' profiles
+- See user stats (games played, playtime)
+- See recent activity
+- Online status and current game
+- Friend actions (add/remove/accept/decline/block)
 
 **Leaderboards**:
 - **Per-Game Leaderboards**: Each game has its own leaderboard
 - Global top scores per game/mode/difficulty
 - Time-based filters (all-time, monthly, weekly, daily)
-- Friends-only leaderboards
+- Friends-only leaderboards (toggle filter)
 - Personal bests tracking
 - Percentile ranking
 - Pagination and search
+- Click usernames to view profiles
 
 **User Statistics Dashboard**:
 - Games played with frequency

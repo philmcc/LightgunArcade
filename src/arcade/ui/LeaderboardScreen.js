@@ -16,6 +16,7 @@ export class LeaderboardScreen {
         this.gameRegistry = options.gameRegistry;
         this.currentUserId = options.currentUserId;
         this.onBack = options.onBack || (() => {});
+        this.onViewProfile = options.onViewProfile || (() => {}); // Callback to view user profile
         
         // State
         this.selectedGame = options.initialGame || null;
@@ -186,12 +187,14 @@ export class LeaderboardScreen {
         const hasPending = this.pendingRequests.some(r => r.to?.id === entry.user?.id);
         const canAddFriend = this.friendService && !isCurrentUser && !isFriend && entry.user?.id;
 
+        const canViewProfile = entry.user?.id && !isCurrentUser;
+
         return `
             <div class="leaderboard-entry ${isCurrentUser ? 'current-user' : ''} ${rankClass}">
                 <span class="entry-rank">
                     ${rank <= 3 ? this._getRankMedal(rank) : `#${rank}`}
                 </span>
-                <div class="entry-user">
+                <div class="entry-user ${canViewProfile ? 'clickable' : ''}" ${canViewProfile ? `data-action="view-profile" data-user-id="${entry.user.id}"` : ''}>
                     ${entry.user?.avatarUrl 
                         ? `<img src="${entry.user.avatarUrl}" class="entry-avatar" alt="">`
                         : '<span class="avatar-placeholder">👤</span>'
@@ -271,7 +274,15 @@ export class LeaderboardScreen {
 
         // Add friend buttons
         this.container.querySelectorAll('[data-action="add-friend"]').forEach(btn => {
-            btn.onclick = () => this._handleAddFriend(btn.dataset.userId);
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                this._handleAddFriend(btn.dataset.userId);
+            };
+        });
+
+        // View profile clicks
+        this.container.querySelectorAll('[data-action="view-profile"]').forEach(el => {
+            el.onclick = () => this.onViewProfile(el.dataset.userId);
         });
     }
 

@@ -16,6 +16,224 @@ export class FriendService {
         this.onlineStatusListeners = [];
         this.friendListeners = [];
         this._presenceChannel = null;
+        this._onlineUsers = new Map(); // userId -> { status, lastSeen, currentGame }
+        this._presenceUpdateInterval = null;
+    }
+
+    // =========================================================================
+    // ONLINE PRESENCE SYSTEM
+    // =========================================================================
+
+    /**
+     * Initialize presence tracking for the current user
+     * Call this after user logs in
+     */
+    async initPresence() {
+        const profile = this.auth.getCurrentUser();
+        if (!profile || profile.isGuest || !isSupabaseConfigured()) {
+            return;
+        }
+
+        // Clean up any existing presence
+        this.cleanupPresence();
+
+        // Create presence channel
+        this._presenceChannel = supabase.channel('online-users', {
+            config: {
+                presence: {
+                    key: profile.id
+                }
+            }
+        });
+
+        // Track presence state changes
+        this._presenceChannel
+            .on('presence', { event: 'sync' }, () => {
+                const state = this._presenceChannel.presenceState();
+                this._updateOnlineUsers(state);
+            })
+            .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+                console.log('User joined:', key, newPresences);
+                this._notifyOnlineStatusListeners();
+            })
+            .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+                console.log('User left:', key, leftPresences);
+                this._notifyOnlineStatusListeners();
+            });
+
+        // Subscribe and track our presence
+        await this._presenceChannel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await this._presenceChannel.track({
+                    user_id: profile.id,
+                    username: profile.username,
+                    status: 'online',
+                    current_game: null,
+                    online_at: new Date().toISOString()
+                });
+            }
+        });
+
+        // Update last_active in database periodically
+        this._presenceUpdateInterval = setInterval(() => {
+            this._updateLastActive();
+        }, 60000); // Every minute
+    }
+
+    /**
+     * Update user's current game status
+     * @param {string|null} gameId - Current game ID or null if not playing
+     * @param {string|null} gameName - Current game name
+     */
+    async updateCurrentGame(gameId, gameName = null) {
+        const profile = this.auth.getCurrentUser();
+        if (!profile || profile.isGuest || !this._presenceChannel) {
+            return;
+        }
+
+        await this._presenceChannel.track({
+            user_id: profile.id,
+            username: profile.username,
+            status: gameId ? 'playing' : 'online',
+            current_game: gameId,
+            current_game_name: gameName,
+            online_at: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Set user status (online, away, busy)
+     * @param {'online' | 'away' | 'busy'} status 
+     */
+    async setStatus(status) {
+        const profile = this.auth.getCurrentUser();
+        if (!profile || profile.isGuest || !this._presenceChannel) {
+            return;
+        }
+
+        const currentState = this._onlineUsers.get(profile.id) || {};
+        await this._presenceChannel.track({
+            user_id: profile.id,
+            username: profile.username,
+            status: status,
+            current_game: currentState.current_game || null,
+            online_at: new Date().toISOString()
+        });
+    }
+
+    /**
+     * Clean up presence tracking
+     * Call this on logout
+     */
+    cleanupPresence() {
+        if (this._presenceUpdateInterval) {
+            clearInterval(this._presenceUpdateInterval);
+            this._presenceUpdateInterval = null;
+        }
+        if (this._presenceChannel) {
+            this._presenceChannel.untrack();
+            supabase.removeChannel(this._presenceChannel);
+            this._presenceChannel = null;
+        }
+        this._onlineUsers.clear();
+    }
+
+    /**
+     * Get online status for a specific user
+     * @param {string} userId 
+     * @returns {{ isOnline: boolean, status: string, currentGame: string|null, lastSeen: Date }}
+     */
+    getOnlineStatus(userId) {
+        const presence = this._onlineUsers.get(userId);
+        if (presence) {
+            return {
+                isOnline: true,
+                status: presence.status || 'online',
+                currentGame: presence.current_game,
+                currentGameName: presence.current_game_name,
+                lastSeen: new Date(presence.online_at)
+            };
+        }
+        return {
+            isOnline: false,
+            status: 'offline',
+            currentGame: null,
+            currentGameName: null,
+            lastSeen: null
+        };
+    }
+
+    /**
+     * Get all online friends
+     * @returns {Array<{ userId: string, username: string, status: string, currentGame: string|null }>}
+     */
+    async getOnlineFriends() {
+        const { friends } = await this.getFriends();
+        const onlineFriends = [];
+
+        for (const friend of friends) {
+            const status = this.getOnlineStatus(friend.id);
+            if (status.isOnline) {
+                onlineFriends.push({
+                    ...friend,
+                    ...status
+                });
+            }
+        }
+
+        return onlineFriends;
+    }
+
+    /**
+     * Subscribe to online status changes
+     * @param {function} callback - Called when any friend's status changes
+     * @returns {function} Unsubscribe function
+     */
+    onOnlineStatusChange(callback) {
+        this.onlineStatusListeners.push(callback);
+        return () => {
+            this.onlineStatusListeners = this.onlineStatusListeners.filter(cb => cb !== callback);
+        };
+    }
+
+    /**
+     * Update the online users map from presence state
+     * @private
+     */
+    _updateOnlineUsers(state) {
+        this._onlineUsers.clear();
+        for (const [userId, presences] of Object.entries(state)) {
+            if (presences.length > 0) {
+                // Use the most recent presence
+                const latest = presences[presences.length - 1];
+                this._onlineUsers.set(userId, latest);
+            }
+        }
+        this._notifyOnlineStatusListeners();
+    }
+
+    /**
+     * Notify all online status listeners
+     * @private
+     */
+    _notifyOnlineStatusListeners() {
+        this.onlineStatusListeners.forEach(cb => cb(this._onlineUsers));
+    }
+
+    /**
+     * Update last_active timestamp in database
+     * @private
+     */
+    async _updateLastActive() {
+        const profile = this.auth.getCurrentUser();
+        if (!profile || profile.isGuest || !isSupabaseConfigured()) {
+            return;
+        }
+
+        await supabase
+            .from('profiles')
+            .update({ last_active: new Date().toISOString() })
+            .eq('id', profile.id);
     }
 
     /**

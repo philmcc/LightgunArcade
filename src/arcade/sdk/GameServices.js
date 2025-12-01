@@ -168,6 +168,16 @@ export class GameServices {
                         hits: player.hits || 0,
                         shots: player.stats?.totalShots || 0
                     });
+
+                    // Post to activity feed if personal best
+                    if (result.isPersonalBest) {
+                        await this.system.activity.postScoreActivity(
+                            gameId,
+                            score,
+                            { mode, difficulty, multiplayer: true, gameMode, rank: rank + 1 },
+                            true // isPersonalBest
+                        );
+                    }
                     
                     results.push({ 
                         playerIndex: player.index, 

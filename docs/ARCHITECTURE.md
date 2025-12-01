@@ -1,6 +1,6 @@
 # Lightgun Arcade - Architecture Overview
 
-**Last Updated**: 2025-11-28
+**Last Updated**: 2025-12-01
 
 This document provides a high-level overview of the codebase architecture for LLM coding assistants and developers.
 
@@ -34,10 +34,24 @@ src/
 │   │
 │   ├── services/
 │   │   ├── GameHighScores.js  # Per-game score storage
-│   │   └── AuthService.js     # User authentication (stub)
+│   │   ├── AuthService.js     # User authentication
+│   │   ├── UserService.js     # User profiles and data
+│   │   ├── FriendService.js   # Friends and online presence
+│   │   ├── ActivityService.js # Social activity feed
+│   │   ├── ScoreService.js    # Online score submission
+│   │   ├── LeaderboardService.js # Leaderboards
+│   │   ├── SessionService.js  # Play session tracking
+│   │   ├── StatsService.js    # User statistics
+│   │   └── NotificationService.js # Real-time notifications
 │   │
 │   ├── ui/
-│   │   └── GunSetupMenu.js    # Gun configuration UI
+│   │   ├── GunSetupMenu.js    # Gun configuration UI
+│   │   ├── FriendsScreen.js   # Friends management
+│   │   ├── LeaderboardScreen.js # Leaderboards display
+│   │   ├── ActivityFeedScreen.js # Activity feed
+│   │   ├── ProfileViewScreen.js # View user profiles
+│   │   ├── StatsScreen.js     # User statistics
+│   │   └── EditProfileScreen.js # Edit own profile
 │   │
 │   └── GlobalHighScores.js    # Cross-game leaderboard
 │

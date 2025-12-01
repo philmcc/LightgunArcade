@@ -105,15 +105,16 @@ Transform the current Lightgun Arcade into a flexible, extensible platform where
 
 ---
 
-### **Phase 3: Social Features & Tournaments** 🟡 *MEDIUM PRIORITY*
+### **Phase 3: Social Features & Tournaments** 🟢 *IMPLEMENTED*
 
 #### Friends System
 - [x] **Friend Management**
   - Send friend requests
   - Accept/decline requests
   - Remove friends
-  - Block users
+  - Block/unblock users
   - Friend list view (online status)
+  - View user profiles
 
 - [x] **Friend Discovery**
   - Search by username
@@ -125,9 +126,31 @@ Transform the current Lightgun Arcade into a flexible, extensible platform where
   - Profile visibility (public, friends-only, private)
   - Activity visibility settings
 
+- [x] **Online Presence** (New - Dec 2025)
+  - Real-time presence tracking via Supabase Realtime
+  - Status types: online, away, busy, playing
+  - Shows current game being played
+  - Friends sorted by online status
+  - Automatic updates on game launch/exit
+
+- [x] **User Profile Viewing** (New - Dec 2025)
+  - ProfileViewScreen for viewing other users
+  - User stats display (games played, playtime)
+  - Recent activity display
+  - Friend actions (add/remove/block)
+  - Online status and current game
+
+- [x] **Real-Time Notifications** (New - Dec 2025)
+  - Toast notifications for social events
+  - Friend request notifications
+  - Friend accepted notifications
+  - Score beat notifications
+  - NotificationService with Supabase Realtime
+
 #### Activity Feed
 - [x] **Feed Items**
   - High score posted
+  - Personal best achieved (auto-posted)
   - Game played (with who, if multiplayer)
   - Achievement unlocked
   - Tournament joined/won
@@ -140,6 +163,7 @@ Transform the current Lightgun Arcade into a flexible, extensible platform where
   - Comments on feed items
   - Filter by friend or game
   - Infinite scroll pagination
+  - Auto-posting on personal bests (single & multiplayer)
 
 #### Tournament System
 - [x] **Tournament Types**
