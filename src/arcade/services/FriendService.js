@@ -242,25 +242,34 @@ export class FriendService {
      * @returns {Promise<{error: Error}>}
      */
     async sendFriendRequest(targetUserId) {
+        console.log('sendFriendRequest called with targetUserId:', targetUserId);
+        
         const profile = this.auth.getCurrentUser();
+        console.log('Current user profile:', profile?.id, profile?.username);
+        
         if (!profile || profile.isGuest) {
+            console.log('User not logged in or is guest');
             return { error: new Error('Must be logged in') };
         }
 
         if (targetUserId === profile.id) {
+            console.log('Cannot add self');
             return { error: new Error('Cannot add yourself as a friend') };
         }
 
         if (!isSupabaseConfigured()) {
+            console.log('Supabase not configured');
             return { error: new Error('Supabase not configured') };
         }
 
         // Check if friendship already exists
-        const { data: existing } = await supabase
+        const { data: existing, error: existingError } = await supabase
             .from('friendships')
             .select('id, status')
             .or(`and(user_id.eq.${profile.id},friend_id.eq.${targetUserId}),and(user_id.eq.${targetUserId},friend_id.eq.${profile.id})`)
             .single();
+
+        console.log('Existing friendship check:', existing, existingError);
 
         if (existing) {
             if (existing.status === 'accepted') {
@@ -281,19 +290,31 @@ export class FriendService {
             .eq('id', targetUserId)
             .single();
 
+        console.log('Target profile privacy:', targetProfile?.privacy_settings);
+
         if (targetProfile?.privacy_settings?.friend_requests === 'none') {
             return { error: new Error('This user is not accepting friend requests') };
         }
 
         // Create friend request
-        const { error } = await supabase
+        console.log('Inserting friendship:', {
+            user_id: profile.id,
+            friend_id: targetUserId,
+            requested_by: profile.id,
+            status: 'pending'
+        });
+        
+        const { data: insertData, error } = await supabase
             .from('friendships')
             .insert({
                 user_id: profile.id,
                 friend_id: targetUserId,
                 requested_by: profile.id,
                 status: 'pending'
-            });
+            })
+            .select();
+        
+        console.log('Insert result:', insertData, 'Error:', error);
 
         return { error };
     }

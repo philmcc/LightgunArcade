@@ -2049,6 +2049,28 @@ button:disabled {
   margin-top: 0.25rem;
 }
 
+.requests-section-title {
+  font-size: 0.9rem;
+  color: var(--secondary-color);
+  margin: 1rem 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.requests-section-title:first-child {
+  margin-top: 0;
+}
+
+.request-item.sent {
+  opacity: 0.8;
+}
+
+.status-text.pending {
+  display: block;
+  color: #ffaa00;
+  font-size: 0.75rem;
+}
+
 /* ============================================
    EDIT PROFILE SCREEN
    ============================================ */

@@ -547,6 +547,10 @@ export class ArcadeSystem {
         const btnLogout = document.getElementById('btn-logout');
         if (btnLogout) {
             btnLogout.onclick = async () => {
+                // Clear all local player slots first
+                for (let i = 0; i < 4; i++) {
+                    this.localPlayers.setSlotAsGuest(i);
+                }
                 await this.auth.signOut();
                 this.showProfile();
             };

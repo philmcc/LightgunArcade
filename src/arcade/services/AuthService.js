@@ -229,6 +229,9 @@ export class AuthService {
             return { user: null, error: new Error('Username is already taken') };
         }
 
+        const avatarUrl = options.avatar_url || generateAvatarSvg(getDefaultAvatar());
+        const displayName = options.display_name || username;
+
         // Sign up with Supabase Auth
         const { data, error } = await supabase.auth.signUp({
             email,
@@ -236,8 +239,8 @@ export class AuthService {
             options: {
                 data: {
                     username: username.toLowerCase(),
-                    display_name: options.display_name || username,
-                    avatar_url: options.avatar_url || generateAvatarSvg(getDefaultAvatar())
+                    display_name: displayName,
+                    avatar_url: avatarUrl
                 }
             }
         });
@@ -246,7 +249,76 @@ export class AuthService {
             return { user: null, error };
         }
 
+        // Explicitly create profile (in case the database trigger doesn't exist or fails)
+        if (data.user) {
+            await this._ensureProfileExists(data.user.id, {
+                username: username.toLowerCase(),
+                display_name: displayName,
+                avatar_url: avatarUrl
+            });
+        }
+
         return { user: data.user, error: null };
+    }
+
+    /**
+     * Ensure a profile exists for the given user ID
+     * Creates one if it doesn't exist
+     * @private
+     */
+    async _ensureProfileExists(userId, profileData) {
+        try {
+            // Check if profile already exists
+            const { data: existing } = await supabase
+                .from('profiles')
+                .select('id, privacy_settings')
+                .eq('id', userId)
+                .single();
+
+            if (existing) {
+                console.log('Profile already exists for user:', userId);
+                
+                // If privacy_settings is null, update it to default
+                if (!existing.privacy_settings) {
+                    console.log('Updating missing privacy_settings for user:', userId);
+                    await supabase
+                        .from('profiles')
+                        .update({
+                            privacy_settings: {
+                                profile: 'public',
+                                activity: 'friends',
+                                friend_requests: 'everyone'
+                            }
+                        })
+                        .eq('id', userId);
+                }
+                return;
+            }
+
+            // Create profile with default privacy settings
+            console.log('Creating profile for user:', userId);
+            const { error } = await supabase
+                .from('profiles')
+                .insert({
+                    id: userId,
+                    username: profileData.username,
+                    display_name: profileData.display_name,
+                    avatar_url: profileData.avatar_url,
+                    privacy_settings: {
+                        profile: 'public',
+                        activity: 'friends',
+                        friend_requests: 'everyone'
+                    }
+                });
+
+            if (error) {
+                console.error('Failed to create profile:', error);
+            } else {
+                console.log('Profile created successfully');
+            }
+        } catch (e) {
+            console.error('Error ensuring profile exists:', e);
+        }
     }
 
     /**
@@ -272,6 +344,17 @@ export class AuthService {
         // Update current user and load profile
         this.currentUser = data.user;
         
+        // Ensure profile exists in database (for users who registered before profile creation was fixed)
+        const username = data.user.user_metadata?.username || data.user.email?.split('@')[0];
+        const displayName = data.user.user_metadata?.display_name || data.user.email?.split('@')[0];
+        const avatarUrl = data.user.user_metadata?.avatar_url || generateAvatarSvg(getDefaultAvatar());
+        
+        await this._ensureProfileExists(data.user.id, {
+            username: username,
+            display_name: displayName,
+            avatar_url: avatarUrl
+        });
+        
         // Load profile with timeout
         try {
             const timeoutPromise = new Promise((_, reject) => 
@@ -283,9 +366,9 @@ export class AuthService {
             // Create fallback profile from auth data
             this.profile = {
                 id: data.user.id,
-                username: data.user.user_metadata?.username || data.user.email?.split('@')[0],
-                display_name: data.user.user_metadata?.display_name || data.user.email?.split('@')[0],
-                avatar_url: data.user.user_metadata?.avatar_url,
+                username: username,
+                display_name: displayName,
+                avatar_url: avatarUrl,
                 isGuest: false
             };
         }

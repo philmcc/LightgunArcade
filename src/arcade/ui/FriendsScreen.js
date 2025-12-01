@@ -148,7 +148,10 @@ export class FriendsScreen {
     }
 
     _renderRequests() {
-        if (this.pendingRequests.length === 0) {
+        const hasIncoming = this.pendingRequests.length > 0;
+        const hasSent = this.sentRequests.length > 0;
+        
+        if (!hasIncoming && !hasSent) {
             return `
                 <div class="empty-state">
                     <p>No pending requests</p>
@@ -156,35 +159,68 @@ export class FriendsScreen {
             `;
         }
 
-        return `
-            <div class="requests-list">
-                ${this.pendingRequests.map(request => {
-                    const user = request.from || request;
-                    return `
-                        <div class="request-item" data-request-id="${request.requestId}">
-                            <div class="friend-avatar">
-                                ${user.avatar_url 
-                                    ? `<img src="${user.avatar_url}" alt="${user.username}">`
-                                    : '<span class="avatar-placeholder">👤</span>'
-                                }
-                            </div>
-                            <div class="friend-info">
-                                <span class="friend-name">${user.display_name || user.username}</span>
-                                <span class="friend-username">@${user.username}</span>
-                            </div>
-                            <div class="request-actions">
-                                <button class="btn-small btn-accept" data-action="accept" data-request-id="${request.requestId}">
-                                    Accept
-                                </button>
-                                <button class="btn-small btn-decline" data-action="decline" data-request-id="${request.requestId}">
-                                    Decline
-                                </button>
-                            </div>
+        let html = '<div class="requests-list">';
+        
+        // Incoming requests
+        if (hasIncoming) {
+            html += `<h3 class="requests-section-title">Incoming Requests</h3>`;
+            html += this.pendingRequests.map(request => {
+                const user = request.from || request;
+                return `
+                    <div class="request-item" data-request-id="${request.requestId}">
+                        <div class="friend-avatar">
+                            ${user.avatar_url 
+                                ? `<img src="${user.avatar_url}" alt="${user.username}">`
+                                : '<span class="avatar-placeholder">👤</span>'
+                            }
                         </div>
-                    `;
-                }).join('')}
-            </div>
-        `;
+                        <div class="friend-info">
+                            <span class="friend-name">${user.display_name || user.username}</span>
+                            <span class="friend-username">@${user.username}</span>
+                        </div>
+                        <div class="request-actions">
+                            <button class="btn-small btn-accept" data-action="accept" data-request-id="${request.requestId}">
+                                Accept
+                            </button>
+                            <button class="btn-small btn-decline" data-action="decline" data-request-id="${request.requestId}">
+                                Decline
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Sent requests
+        if (hasSent) {
+            html += `<h3 class="requests-section-title">Sent Requests</h3>`;
+            html += this.sentRequests.map(request => {
+                const user = request.to || request;
+                return `
+                    <div class="request-item sent" data-request-id="${request.requestId}">
+                        <div class="friend-avatar">
+                            ${user.avatar_url 
+                                ? `<img src="${user.avatar_url}" alt="${user.username}">`
+                                : '<span class="avatar-placeholder">👤</span>'
+                            }
+                        </div>
+                        <div class="friend-info">
+                            <span class="friend-name">${user.display_name || user.username}</span>
+                            <span class="friend-username">@${user.username}</span>
+                            <span class="status-text pending">Pending...</span>
+                        </div>
+                        <div class="request-actions">
+                            <button class="btn-small btn-decline" data-action="cancel" data-request-id="${request.requestId}">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        html += '</div>';
+        return html;
     }
 
     _renderRecentPlayers() {
@@ -355,35 +391,64 @@ export class FriendsScreen {
 
     async _handleAction(action, data) {
         try {
+            let result;
             switch (action) {
                 case 'add':
-                    await this.friendService.sendFriendRequestByUsername(data.username);
-                    this._showNotification('Friend request sent!');
+                    result = await this.friendService.sendFriendRequestByUsername(data.username);
+                    if (result.error) {
+                        this._showNotification(result.error.message, 'error');
+                    } else {
+                        this._showNotification('Friend request sent!');
+                    }
                     await this._handleSearch(this.container.querySelector('#search-input')?.value);
                     break;
 
                 case 'add-by-id':
-                    await this.friendService.sendFriendRequest(data.userId);
-                    this._showNotification('Friend request sent!');
+                    result = await this.friendService.sendFriendRequest(data.userId);
+                    if (result.error) {
+                        this._showNotification(result.error.message, 'error');
+                    } else {
+                        this._showNotification('Friend request sent!');
+                    }
                     await this.loadData();
                     break;
 
                 case 'accept':
-                    await this.friendService.acceptFriendRequest(data.requestId);
-                    this._showNotification('Friend request accepted!');
+                    result = await this.friendService.acceptFriendRequest(data.requestId);
+                    if (result.error) {
+                        this._showNotification(result.error.message, 'error');
+                    } else {
+                        this._showNotification('Friend request accepted!');
+                    }
                     await this.loadData();
                     break;
 
                 case 'decline':
-                    await this.friendService.declineFriendRequest(data.requestId);
+                    result = await this.friendService.declineFriendRequest(data.requestId);
+                    if (result.error) {
+                        this._showNotification(result.error.message, 'error');
+                    }
                     await this.loadData();
                     break;
 
                 case 'remove':
                     if (confirm('Remove this friend?')) {
-                        await this.friendService.removeFriend(data.userId);
+                        result = await this.friendService.removeFriend(data.userId);
+                        if (result.error) {
+                            this._showNotification(result.error.message, 'error');
+                        }
                         await this.loadData();
                     }
+                    break;
+
+                case 'cancel':
+                    result = await this.friendService.cancelFriendRequest(data.requestId);
+                    if (result.error) {
+                        this._showNotification(result.error.message, 'error');
+                    } else {
+                        this._showNotification('Friend request cancelled');
+                    }
+                    await this.loadData();
                     break;
             }
         } catch (error) {
