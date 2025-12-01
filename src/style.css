@@ -1982,6 +1982,71 @@ button:disabled {
   font-size: 1.1rem;
   font-weight: bold;
   color: var(--secondary-color);
+  min-width: 80px;
+  text-align: right;
+}
+
+.entry-difficulty {
+  font-size: 0.9rem;
+  min-width: 30px;
+  text-align: center;
+}
+
+.diff-icon {
+  cursor: help;
+}
+
+.entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-add-friend {
+  background: var(--secondary-color);
+  color: #000;
+  border: none;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add-friend:hover {
+  background: #fff;
+  transform: scale(1.1);
+}
+
+.status-text.pending {
+  color: #ffaa00;
+  font-size: 0.75rem;
+}
+
+/* ============================================
+   RECENT PLAYERS (Friends Screen)
+   ============================================ */
+
+.recent-players-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.recent-player-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #333;
+  border-radius: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.recent-info {
+  display: block;
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 0.25rem;
 }
 
 /* ============================================
@@ -2205,4 +2270,427 @@ button:disabled {
 
 .back-btn {
   margin-top: 1.5rem;
+}
+
+/* ============================================
+   Player Select Screen - Multi-User Support
+   ============================================ */
+
+.player-select-screen {
+  max-width: 700px;
+}
+
+.player-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.player-slot {
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid var(--player-color, #444);
+  border-radius: 12px;
+  padding: 1.25rem;
+  text-align: center;
+  transition: all 0.2s ease;
+  width: 200px;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-slot.active {
+  background: rgba(0, 0, 0, 0.6);
+  border-color: var(--player-color);
+  box-shadow: 0 0 15px rgba(var(--player-color-rgb, 255, 68, 68), 0.3);
+}
+
+.player-slot.inactive {
+  opacity: 0.3;
+  display: none;
+}
+
+.slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.player-number {
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--player-color);
+}
+
+.player-color-indicator {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.slot-user {
+  margin: 0.75rem 0;
+  min-height: 80px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.slot-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--player-color);
+}
+
+.slot-avatar-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+}
+
+.user-name {
+  font-size: 0.9rem;
+  color: #fff;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logged-in-badge {
+  color: #4CAF50;
+  font-size: 0.8rem;
+}
+
+.guest-badge {
+  background: rgba(255, 255, 255, 0.1);
+  color: #888;
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.slot-login-btn {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.75rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--player-color);
+  color: var(--player-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slot-login-btn:hover {
+  background: var(--player-color);
+  color: #000;
+}
+
+.slot-status {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  font-size: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.gun-ready {
+  color: #4CAF50;
+}
+
+.gun-missing {
+  color: #888;
+}
+
+.slot-empty, .slot-empty-user {
+  color: #444;
+}
+
+/* Slot Login Screen */
+.slot-login-screen {
+  max-width: 400px;
+}
+
+.slot-login-screen h1 {
+  color: var(--player-color);
+}
+
+.slot-login-screen .login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.slot-login-screen input {
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+}
+
+.slot-login-screen input:focus {
+  outline: none;
+  border-color: var(--player-color);
+}
+
+.slot-login-screen .error-message {
+  background: rgba(255, 0, 0, 0.2);
+  border: 1px solid #ff4444;
+  padding: 0.5rem;
+  border-radius: 4px;
+  color: #ff6666;
+  font-size: 0.9rem;
+}
+
+.slot-login-screen button {
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.slot-login-screen .btn-primary {
+  background: var(--player-color);
+  border: none;
+  color: #000;
+  font-weight: bold;
+}
+
+.slot-login-screen .btn-primary:hover {
+  filter: brightness(1.2);
+}
+
+#btn-slot-guest {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #888;
+}
+
+#btn-slot-guest:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+#btn-slot-back {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #666;
+  margin-top: 1rem;
+}
+
+#btn-slot-back:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+.login-divider {
+  color: #666;
+  font-size: 0.85rem;
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 2px solid var(--player-color);
+  color: var(--player-color);
+}
+
+.btn-secondary:hover {
+  background: var(--player-color);
+  color: #000;
+}
+
+#btn-slot-login-link {
+  background: transparent;
+  border: none;
+  color: var(--player-color);
+  text-decoration: underline;
+  font-size: 0.9rem;
+}
+
+#btn-slot-login-link:hover {
+  color: #fff;
+}
+
+/* ============================================
+   Player Slots Bar (Arcade Home Screen)
+   ============================================ */
+
+.player-slots-bar {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+  flex-wrap: wrap;
+}
+
+.player-slot-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--player-color);
+  border-radius: 25px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 140px;
+}
+
+.player-slot-chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.05);
+}
+
+.player-slot-chip.has-user {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.player-slot-chip .slot-label {
+  font-weight: bold;
+  color: var(--player-color);
+  font-size: 0.9rem;
+}
+
+.player-slot-chip .slot-user-name {
+  color: #fff;
+  font-size: 0.85rem;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-slot-chip .slot-gun-label {
+  font-size: 0.7rem;
+  color: #888;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.player-slot-chip .slot-login-text {
+  color: #666;
+  font-size: 0.75rem;
+}
+
+/* Current user info on player screen */
+.current-user-info {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.user-avatar-large {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--player-color);
+  overflow: hidden;
+}
+
+.user-avatar-large img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-name-large {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #fff;
+}
+
+.user-email {
+  font-size: 0.9rem;
+  color: #888;
+  margin-top: 0.25rem;
+}
+
+.btn-danger {
+  background: #ff4444;
+  border: none;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #ff6666;
+}
+
+/* Gun Setup - Player Assignment */
+.gun-player-assignment {
+  padding: 0.75rem;
+  margin: 0.5rem 0;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+}
+
+.gun-player-assignment label {
+  display: block;
+  font-size: 0.8rem;
+  color: #888;
+  margin-bottom: 0.5rem;
+}
+
+.player-assign-select {
+  width: 100%;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.player-assign-select:focus {
+  outline: none;
+  border-color: #00ccff;
+}
+
+.player-assign-select option {
+  background: #222;
+  color: #fff;
+}
+
+.assigned-user-chip {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  color: #fff;
 }

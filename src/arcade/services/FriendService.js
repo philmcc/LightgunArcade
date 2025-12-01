@@ -10,11 +10,64 @@ import { supabase, isSupabaseConfigured } from '../../platform/supabase.js';
  * - Online status tracking
  */
 export class FriendService {
-    constructor(authService) {
+    constructor(authService, userService = null) {
         this.auth = authService;
+        this.userService = userService;
         this.onlineStatusListeners = [];
         this.friendListeners = [];
         this._presenceChannel = null;
+    }
+
+    /**
+     * Set the user service (for dependency injection after construction)
+     * @param {UserService} userService 
+     */
+    setUserService(userService) {
+        this.userService = userService;
+    }
+
+    /**
+     * Search for users by username
+     * Delegates to UserService
+     * @param {string} query - Search query
+     * @param {number} limit - Max results
+     * @returns {Promise<{users: Array, error: Error}>}
+     */
+    async searchUsers(query, limit = 10) {
+        if (!this.userService) {
+            // Fallback: direct search if no userService
+            return this._searchUsersDirect(query, limit);
+        }
+        return this.userService.searchUsers(query, limit);
+    }
+
+    /**
+     * Direct user search (fallback if no UserService)
+     * @private
+     */
+    async _searchUsersDirect(query, limit = 10) {
+        if (!isSupabaseConfigured()) {
+            return { users: [], error: new Error('Supabase not configured') };
+        }
+
+        if (!query || query.length < 2) {
+            return { users: [], error: null };
+        }
+
+        const profile = this.auth.getCurrentUser();
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .ilike('username', `%${query}%`)
+            .neq('id', profile?.id || '') // Exclude self
+            .limit(limit);
+
+        if (error) {
+            return { users: [], error };
+        }
+
+        return { users: data || [], error: null };
     }
 
     /**
@@ -81,27 +134,45 @@ export class FriendService {
             return { requests: [], error: new Error('Supabase not configured') };
         }
 
+        // Get pending requests where current user is the recipient (friend_id)
         const { data, error } = await supabase
             .from('friendships')
             .select(`
                 id,
                 created_at,
-                requested_by,
-                requester:profiles!friendships_requested_by_fkey (
-                    id, username, display_name, avatar_url
-                )
+                user_id,
+                requested_by
             `)
             .eq('friend_id', profile.id)
             .eq('status', 'pending');
 
         if (error) {
+            console.error('Error fetching pending requests:', error);
             return { requests: [], error };
         }
+
+        if (!data || data.length === 0) {
+            return { requests: [], error: null };
+        }
+
+        // Fetch requester profiles separately
+        const requesterIds = data.map(r => r.user_id);
+        const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .in('id', requesterIds);
+
+        if (profileError) {
+            console.error('Error fetching requester profiles:', profileError);
+            return { requests: [], error: profileError };
+        }
+
+        const profileMap = new Map(profiles.map(p => [p.id, p]));
 
         const requests = data.map(r => ({
             requestId: r.id,
             createdAt: r.created_at,
-            from: r.requester
+            from: profileMap.get(r.user_id) || { id: r.user_id, username: 'Unknown' }
         }));
 
         return { requests, error: null };
@@ -121,27 +192,45 @@ export class FriendService {
             return { requests: [], error: new Error('Supabase not configured') };
         }
 
+        // Get pending requests where current user is the sender
         const { data, error } = await supabase
             .from('friendships')
             .select(`
                 id,
                 created_at,
-                friend:profiles!friendships_friend_id_fkey (
-                    id, username, display_name, avatar_url
-                )
+                friend_id
             `)
             .eq('user_id', profile.id)
             .eq('requested_by', profile.id)
             .eq('status', 'pending');
 
         if (error) {
+            console.error('Error fetching sent requests:', error);
             return { requests: [], error };
         }
+
+        if (!data || data.length === 0) {
+            return { requests: [], error: null };
+        }
+
+        // Fetch recipient profiles separately
+        const recipientIds = data.map(r => r.friend_id);
+        const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, username, display_name, avatar_url')
+            .in('id', recipientIds);
+
+        if (profileError) {
+            console.error('Error fetching recipient profiles:', profileError);
+            return { requests: [], error: profileError };
+        }
+
+        const profileMap = new Map(profiles.map(p => [p.id, p]));
 
         const requests = data.map(r => ({
             requestId: r.id,
             createdAt: r.created_at,
-            to: r.friend
+            to: profileMap.get(r.friend_id) || { id: r.friend_id, username: 'Unknown' }
         }));
 
         return { requests, error: null };

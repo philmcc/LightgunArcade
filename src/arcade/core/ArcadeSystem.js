@@ -11,6 +11,8 @@ import { ActivityService } from '../services/ActivityService.js';
 import { SessionService } from '../services/SessionService.js';
 import { StatsService } from '../services/StatsService.js';
 import { GunManager } from './GunManager.js';
+import { LocalPlayersManager } from './LocalPlayersManager.js';
+import { PlayerManager } from './PlayerManager.js';
 import { GunSetupMenu } from '../ui/GunSetupMenu.js';
 import { SettingsScreen } from '../sdk/SettingsScreen.js';
 import { FriendsScreen } from '../ui/FriendsScreen.js';
@@ -35,7 +37,7 @@ export class ArcadeSystem {
         this.users = new UserService(this.auth);
         this.scores = new ScoreService(this.auth);
         this.leaderboards = new LeaderboardService(this.auth);
-        this.friends = new FriendService(this.auth);
+        this.friends = new FriendService(this.auth, this.users);
         this.activity = new ActivityService(this.auth);
         this.sessions = new SessionService(this.auth);
         this.stats = new StatsService(this.auth);
@@ -43,6 +45,9 @@ export class ArcadeSystem {
         // Gun management
         this.gunManager = new GunManager();
         this.gunSetupMenu = new GunSetupMenu(this);
+        
+        // Local multiplayer - multiple users on same device
+        this.localPlayers = new LocalPlayersManager(this.auth);
 
         this.init();
 
@@ -87,6 +92,14 @@ export class ArcadeSystem {
         
         // Start in menu mode (not in game)
         this.gunManager.setInGame(false);
+        
+        // Sync local players slot 0 with primary auth
+        this.localPlayers.syncWithPrimaryAuth();
+        
+        // Keep slot 0 in sync with primary auth changes
+        this.auth.addListener(() => {
+            this.localPlayers.syncWithPrimaryAuth();
+        });
         
         // Update last active periodically
         this._startActivityTracking();
@@ -156,6 +169,11 @@ export class ArcadeSystem {
                     </div>
                 </div>
                 
+                <!-- Player Slots Bar -->
+                <div class="player-slots-bar">
+                    ${this._renderPlayerSlotsBar()}
+                </div>
+                
                 <div class="game-grid">
                     ${games.map(game => `
                         <div class="game-card ${game.isAvailable ? '' : 'locked'}" 
@@ -197,6 +215,217 @@ export class ArcadeSystem {
         document.getElementById('btn-arcade-settings').onclick = () => this.showSettings();
         document.getElementById('btn-profile').onclick = () => this.showProfile();
         document.getElementById('btn-gun-setup').onclick = () => this.showGunSetup();
+        
+        // Player slot login buttons
+        this._bindPlayerSlotButtons();
+    }
+    
+    /**
+     * Render the player slots bar for the arcade menu
+     * @private
+     */
+    _renderPlayerSlotsBar() {
+        let html = '';
+        
+        for (let i = 0; i < 4; i++) {
+            const slot = this.localPlayers.getSlot(i);
+            const colors = PlayerManager.PLAYER_COLORS[i];
+            const user = slot?.user;
+            const gun = this.localPlayers.getGunForSlot(i);
+            const gunLabel = gun !== null ? `GUN ${gun + 1}` : 'NO GUN';
+            
+            html += `
+                <div class="player-slot-chip ${user ? 'has-user' : 'empty'}" 
+                     data-slot="${i}"
+                     style="--player-color: ${colors.primary};">
+                    <span class="slot-label">P${i + 1}</span>
+                    ${user ? `
+                        <span class="slot-user-name">${user.display_name || user.username}</span>
+                        <span class="slot-gun-label">${gunLabel}</span>
+                    ` : `
+                        <span class="slot-login-text">TAP TO LOGIN</span>
+                    `}
+                </div>
+            `;
+        }
+        return html;
+    }
+    
+    /**
+     * Bind click handlers for player slot chips
+     * @private
+     */
+    _bindPlayerSlotButtons() {
+        document.querySelectorAll('.player-slot-chip').forEach(chip => {
+            chip.onclick = () => {
+                const slotIndex = parseInt(chip.dataset.slot);
+                this.showPlayerSlotLogin(slotIndex);
+            };
+        });
+    }
+    
+    /**
+     * Show login screen for a player slot
+     * @param {number} slotIndex
+     */
+    showPlayerSlotLogin(slotIndex) {
+        const colors = PlayerManager.PLAYER_COLORS[slotIndex];
+        const slot = this.localPlayers.getSlot(slotIndex);
+        const isLoggedIn = slot?.isLoggedIn;
+        
+        this.state = 'PLAYER_LOGIN';
+        
+        if (isLoggedIn) {
+            // Show logout option
+            this.uiLayer.innerHTML = `
+                <div class="screen slot-login-screen" style="--player-color: ${colors.primary};">
+                    <h1>PLAYER ${slotIndex + 1}</h1>
+                    <div class="current-user-info">
+                        <div class="user-avatar-large">
+                            ${slot.user?.avatar_url 
+                                ? `<img src="${slot.user.avatar_url}" alt="">` 
+                                : '👤'}
+                        </div>
+                        <div class="user-name-large">${slot.user?.display_name || slot.user?.username}</div>
+                        <div class="user-email">${slot.user?.email || ''}</div>
+                    </div>
+                    <div class="login-form">
+                        <button id="btn-slot-logout" class="btn-danger">LOGOUT</button>
+                        <button id="btn-slot-back">BACK</button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('btn-slot-logout').onclick = async () => {
+                await this.localPlayers.logoutFromSlot(slotIndex);
+                this.showArcadeMenu();
+            };
+            document.getElementById('btn-slot-back').onclick = () => this.showArcadeMenu();
+        } else {
+            // Show login form
+            this.uiLayer.innerHTML = `
+                <div class="screen slot-login-screen" style="--player-color: ${colors.primary};">
+                    <h1>LOGIN - PLAYER ${slotIndex + 1}</h1>
+                    
+                    <div class="login-form">
+                        <input type="email" id="slot-email" placeholder="Email" />
+                        <input type="password" id="slot-password" placeholder="Password" />
+                        <div id="slot-login-error" class="error-message" style="display: none;"></div>
+                        <button id="btn-slot-login" class="btn-primary">SIGN IN</button>
+                        <div class="login-divider">or</div>
+                        <button id="btn-slot-register" class="btn-secondary">CREATE ACCOUNT</button>
+                        <button id="btn-slot-guest">PLAY AS GUEST</button>
+                        <button id="btn-slot-back">BACK</button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('btn-slot-login').onclick = () => this._handleSlotLogin(slotIndex);
+            document.getElementById('btn-slot-register').onclick = () => this._showSlotRegister(slotIndex);
+            document.getElementById('btn-slot-guest').onclick = () => {
+                this.localPlayers.setSlotAsGuest(slotIndex);
+                this.showArcadeMenu();
+            };
+            document.getElementById('btn-slot-back').onclick = () => this.showArcadeMenu();
+        }
+    }
+    
+    /**
+     * Handle slot login
+     * @private
+     */
+    async _handleSlotLogin(slotIndex) {
+        const email = document.getElementById('slot-email').value;
+        const password = document.getElementById('slot-password').value;
+        const errorEl = document.getElementById('slot-login-error');
+        
+        if (!email || !password) {
+            errorEl.textContent = 'Please enter email and password';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        errorEl.style.display = 'none';
+        
+        const { user, error } = await this.localPlayers.loginToSlot(slotIndex, email, password);
+        
+        if (error) {
+            errorEl.textContent = error.message;
+            errorEl.style.display = 'block';
+        } else {
+            this.showArcadeMenu();
+        }
+    }
+    
+    /**
+     * Show registration form for a slot
+     * @private
+     */
+    _showSlotRegister(slotIndex) {
+        const colors = PlayerManager.PLAYER_COLORS[slotIndex];
+        
+        this.uiLayer.innerHTML = `
+            <div class="screen slot-login-screen" style="--player-color: ${colors.primary};">
+                <h1>REGISTER - PLAYER ${slotIndex + 1}</h1>
+                
+                <div class="login-form">
+                    <input type="text" id="slot-username" placeholder="Username" />
+                    <input type="email" id="slot-email" placeholder="Email" />
+                    <input type="password" id="slot-password" placeholder="Password" />
+                    <input type="password" id="slot-password-confirm" placeholder="Confirm Password" />
+                    <div id="slot-login-error" class="error-message" style="display: none;"></div>
+                    <button id="btn-slot-register" class="btn-primary">CREATE ACCOUNT</button>
+                    <div class="login-divider">or</div>
+                    <button id="btn-slot-login-link">ALREADY HAVE AN ACCOUNT?</button>
+                    <button id="btn-slot-back">BACK</button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('btn-slot-register').onclick = () => this._handleSlotRegister(slotIndex);
+        document.getElementById('btn-slot-login-link').onclick = () => this.showPlayerSlotLogin(slotIndex);
+        document.getElementById('btn-slot-back').onclick = () => this.showArcadeMenu();
+    }
+    
+    /**
+     * Handle slot registration
+     * @private
+     */
+    async _handleSlotRegister(slotIndex) {
+        const username = document.getElementById('slot-username').value;
+        const email = document.getElementById('slot-email').value;
+        const password = document.getElementById('slot-password').value;
+        const passwordConfirm = document.getElementById('slot-password-confirm').value;
+        const errorEl = document.getElementById('slot-login-error');
+        
+        if (!username || !email || !password) {
+            errorEl.textContent = 'Please fill in all fields';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        if (password !== passwordConfirm) {
+            errorEl.textContent = 'Passwords do not match';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        if (password.length < 6) {
+            errorEl.textContent = 'Password must be at least 6 characters';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        errorEl.style.display = 'none';
+        
+        const { user, error } = await this.localPlayers.registerToSlot(slotIndex, email, password, username);
+        
+        if (error) {
+            errorEl.textContent = error.message;
+            errorEl.style.display = 'block';
+        } else {
+            this.showArcadeMenu();
+        }
     }
 
     async launchGame(gameId) {
@@ -541,6 +770,7 @@ export class ArcadeSystem {
         
         const screen = new FriendsScreen(this.uiLayer, {
             friendService: this.friends,
+            sessionService: this.sessions,
             onBack: () => this.showProfile()
         });
         
@@ -573,6 +803,7 @@ export class ArcadeSystem {
         const user = this.auth.getCurrentUser();
         const screen = new LeaderboardScreen(this.uiLayer, {
             leaderboardService: this.leaderboards,
+            friendService: this.friends,
             gameRegistry: this.registry,
             currentUserId: user?.id,
             initialGame: gameId,

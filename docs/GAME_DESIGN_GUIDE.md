@@ -1,7 +1,7 @@
 # Lightgun Game Design Guide
 
-**Version**: 1.0  
-**Last Updated**: 2025-11-28  
+**Version**: 1.1  
+**Last Updated**: 2025-11-30  
 **Status**: Living Document
 
 This guide captures best practices, design patterns, and lessons learned from developing lightgun games for the Lightgun Arcade platform. It will grow over time as we build more games and discover what works.
@@ -15,6 +15,8 @@ This guide captures best practices, design patterns, and lessons learned from de
 3. [Target Design](#3-target-design)
 4. [Difficulty & Progression](#4-difficulty--progression)
 5. [Multiplayer Design](#5-multiplayer-design)
+   - [5.4 Score Submission in Multiplayer](#54-score-submission-in-multiplayer)
+   - [5.5 SDK Score System Integration](#55-sdk-score-system-integration)
 6. [Input & Controls](#6-input--controls)
 7. [Feedback & Juice](#7-feedback--juice)
 8. [Accessibility](#8-accessibility)
@@ -295,6 +297,155 @@ Ensure fairness:
 
 ---
 
+## 5.4 Score Submission in Multiplayer
+
+The SDK handles multiplayer score submission automatically. When your game ends:
+
+```javascript
+// In your game's game over handler
+this.showMultiplayerResults({
+    cleared: true,  // or false for game over
+    onRetry: () => this.restart(),
+    onMenu: () => this.showMenu()
+});
+```
+
+This automatically:
+- Saves scores for all players to local high scores
+- Submits online scores for logged-in players
+- Updates player stats (games played, accuracy, etc.)
+- Updates personal bests
+
+---
+
+## 5.5 SDK Score System Integration
+
+All games should use the centralized score system for consistent leaderboard and stats tracking.
+
+### Single Player Score Submission
+
+**When score IS a local high score** (name entry shown):
+```javascript
+showNameEntry(finalScore) {
+    this.ui.overlay.showNameEntry({
+        score: finalScore,
+        defaultName: this.getCurrentUser().name,
+        onSubmit: async (name) => {
+            // Save to local game scores
+            this.highScores.addScore(name, finalScore, difficulty);
+            
+            // Submit to online leaderboard
+            await this.submitScore(finalScore, {
+                mode: 'arcade',
+                difficulty: this.difficulty,
+                playerName: name,
+                metadata: {
+                    accuracy: this.accuracy,
+                    hits: this.hits
+                }
+            });
+            
+            this.showGameOverScreen(finalScore);
+        }
+    });
+}
+```
+
+**When score is NOT a local high score** (still submit online):
+```javascript
+gameOver() {
+    const finalScore = this.score;
+    
+    if (this.highScores.isHighScore(finalScore)) {
+        this.showNameEntry(finalScore);
+    } else {
+        // IMPORTANT: Still submit to online leaderboard!
+        this._submitSinglePlayerScore(finalScore);
+        this.showGameOverScreen(finalScore);
+    }
+}
+
+async _submitSinglePlayerScore(finalScore) {
+    const user = this.getCurrentUser();
+    await this.submitScore(finalScore, {
+        mode: 'arcade',
+        difficulty: this.difficulty,
+        playerName: user.name,
+        metadata: {
+            accuracy: this.accuracy,
+            hits: this.hits
+        }
+    });
+}
+```
+
+### What `submitScore()` Does
+
+The SDK's `submitScore()` method handles everything:
+
+1. **Online submission** - Sends score to Supabase leaderboard
+2. **Personal best tracking** - Updates if this is a new personal best
+3. **Stats update** - Increments games played, tracks accuracy
+4. **Activity feed** - Posts to activity feed if personal best
+5. **Offline queue** - Queues score for later if offline
+6. **Guest fallback** - Stores locally for guest users
+
+### Multiplayer Score Submission
+
+For multiplayer, use `showMultiplayerResults()` which calls the centralized `submitMultiplayerScores()`:
+
+```javascript
+// The SDK handles this automatically when you call:
+this.showMultiplayerResults({
+    cleared: true,
+    onRetry: () => this.restart(),
+    onMenu: () => this.showMenu()
+});
+
+// Behind the scenes, it calls:
+// this.services.submitMultiplayerScores(gameId, players, options)
+```
+
+For each player, this:
+- Submits score to online leaderboard (if logged in)
+- Updates personal best (if applicable)
+- Updates player stats (games played, hits, shots)
+- Saves to local high scores
+
+### Available Services
+
+Games have access to these services via `this.services`:
+
+| Service | Purpose |
+|---------|---------|
+| `this.services.submitScore()` | Submit single player score |
+| `this.services.submitMultiplayerScores()` | Submit all player scores |
+| `this.services.getLeaderboard()` | Fetch leaderboard entries |
+| `this.services.getMyRank()` | Get current user's rank |
+| `this.services.scores` | Direct access to ScoreService |
+| `this.services.sessions` | Session tracking |
+
+### Score Metadata
+
+Include relevant game data in the metadata:
+
+```javascript
+await this.submitScore(score, {
+    mode: 'arcade',           // Required: 'arcade', 'endless', etc.
+    difficulty: 'normal',     // Required: 'easy', 'normal', 'hard'
+    playerName: 'Player1',    // Optional: override name
+    metadata: {               // Optional: game-specific data
+        accuracy: 85,
+        hits: 100,
+        combo: 15,
+        round: 10,
+        gameMode: 'versus'    // For multiplayer context
+    }
+});
+```
+
+---
+
 ## 6. Input & Controls
 
 ### 6.1 Shoot Mechanics
@@ -569,4 +720,4 @@ This is a living document. Add your learnings:
 ---
 
 **Document Maintainer**: Development Team  
-**Last Review**: 2025-11-28
+**Last Review**: 2025-11-30

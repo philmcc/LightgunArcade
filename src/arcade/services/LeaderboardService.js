@@ -19,7 +19,7 @@ export class LeaderboardService {
      * @param {string} gameId - Game identifier
      * @param {Object} options - Filter options
      * @param {string} options.mode - Game mode
-     * @param {string} options.difficulty - Difficulty level
+     * @param {string} options.difficulty - Difficulty level (null/undefined for all difficulties)
      * @param {string} options.timeFilter - 'all', 'daily', 'weekly', 'monthly'
      * @param {boolean} options.friendsOnly - Only show friends
      * @param {number} options.limit - Max results
@@ -29,7 +29,7 @@ export class LeaderboardService {
     async getLeaderboard(gameId, options = {}) {
         const {
             mode = 'arcade',
-            difficulty = 'normal',
+            difficulty = null, // null = all difficulties
             timeFilter = 'all',
             friendsOnly = false,
             limit = 50,
@@ -46,6 +46,7 @@ export class LeaderboardService {
                 .select(`
                     id,
                     score,
+                    difficulty,
                     metadata,
                     created_at,
                     user_id,
@@ -57,9 +58,13 @@ export class LeaderboardService {
                 `, { count: 'exact' })
                 .eq('game_id', gameId)
                 .eq('mode', mode)
-                .eq('difficulty', difficulty)
                 .order('score', { ascending: false })
                 .range(offset, offset + limit - 1);
+            
+            // Only filter by difficulty if specified
+            if (difficulty) {
+                query = query.eq('difficulty', difficulty);
+            }
 
             // Apply time filter
             if (timeFilter !== 'all') {
@@ -102,6 +107,7 @@ export class LeaderboardService {
             const entries = data.map((entry, index) => ({
                 rank: offset + index + 1,
                 score: entry.score,
+                difficulty: entry.difficulty,
                 metadata: entry.metadata,
                 createdAt: entry.created_at,
                 user: {

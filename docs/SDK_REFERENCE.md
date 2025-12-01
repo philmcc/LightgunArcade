@@ -1,7 +1,7 @@
 # Lightgun Arcade SDK Reference
 
-**Version**: 1.1  
-**Last Updated**: 2025-11-28  
+**Version**: 1.2  
+**Last Updated**: 2025-11-30  
 **Status**: Implementation Guide
 
 This document describes the SDK components available for game development. All games extend `BaseGame` and have access to these features automatically.
@@ -94,11 +94,12 @@ When your game extends `BaseGame`, you have access to:
 | `this.uiLayer` | HTMLElement | DOM element for UI overlays |
 | `this.input` | InputManager | Handles mouse/touch/gun input |
 | `this.sound` | SoundManager | Audio playback |
-| `this.highScores` | GameHighScores | Per-game score storage |
+| `this.highScores` | GameHighScores | Per-game local score storage |
 | `this.settings` | Settings | User settings (fullscreen, Sinden, etc.) |
 | `this.ui` | Object | UI component builders (see below) |
 | `this.assets` | AssetLoader | Load images, audio, JSON |
 | `this.players` | PlayerManager | Multiplayer player management |
+| `this.services` | GameServices | Online scores, leaderboards, sessions |
 
 ### Single Player Gun Management
 
@@ -494,14 +495,29 @@ this.showGunSetup(() => {
 
 // Get current user info
 const user = this.getCurrentUser();
-// { name: 'Player', isGuest: true }
+// { name: 'Player', isGuest: true, id: 'uuid', isLoggedIn: true }
 
-// Save to global leaderboard
+// Submit score to online leaderboard (RECOMMENDED)
+await this.submitScore(score, {
+    mode: 'arcade',
+    difficulty: 'normal',
+    playerName: name,
+    metadata: { accuracy: 85, hits: 100 }
+});
+
+// Save to local global leaderboard only (DEPRECATED - use submitScore instead)
 this.saveGlobalScore(name, score, difficulty);
 
 // Control cursor visibility
 this.setInGame(true);   // Hide cursors (gameplay)
 this.setInGame(false);  // Show cursors (menus)
+
+// Show multiplayer results (automatically submits scores)
+this.showMultiplayerResults({
+    cleared: true,
+    onRetry: () => this.restart(),
+    onMenu: () => this.showMenu()
+});
 ```
 
 ---
@@ -551,6 +567,158 @@ const filtered = this.highScores.getScoresByDifficulty('hard');
 
 // Clear scores
 this.highScores.clearScores();
+```
+
+---
+
+## Online Score System (New in 1.2)
+
+The SDK provides a centralized score system that handles online leaderboards, personal bests, and player stats.
+
+### GameServices (`this.services`)
+
+All games have access to online services via `this.services`:
+
+| Service | Description |
+|---------|-------------|
+| `this.services.submitScore()` | Submit single player score |
+| `this.services.submitMultiplayerScores()` | Submit all player scores |
+| `this.services.getLeaderboard()` | Fetch leaderboard entries |
+| `this.services.getMyRank()` | Get current user's rank |
+| `this.services.scores` | Direct access to ScoreService |
+| `this.services.sessions` | Session tracking |
+
+### Single Player Score Submission
+
+**IMPORTANT**: Always submit scores to the online leaderboard, even if not a local high score.
+
+```javascript
+// When score IS a local high score (show name entry)
+showNameEntry(finalScore) {
+    this.ui.overlay.showNameEntry({
+        score: finalScore,
+        defaultName: this.getCurrentUser().name,
+        onSubmit: async (name) => {
+            // Save to local game scores
+            this.highScores.addScore(name, finalScore, this.difficulty);
+            
+            // Submit to online leaderboard
+            await this.submitScore(finalScore, {
+                mode: 'arcade',
+                difficulty: this.difficulty,
+                playerName: name,
+                metadata: {
+                    accuracy: this.accuracy,
+                    hits: this.hits
+                }
+            });
+            
+            this.showGameOverScreen(finalScore);
+        }
+    });
+}
+
+// When score is NOT a local high score (still submit online!)
+gameOver() {
+    const finalScore = this.score;
+    
+    if (this.highScores.isHighScore(finalScore)) {
+        this.showNameEntry(finalScore);
+    } else {
+        // IMPORTANT: Still submit to online leaderboard
+        this._submitSinglePlayerScore(finalScore);
+        this.showGameOverScreen(finalScore);
+    }
+}
+
+// Helper method for non-high-score submissions
+async _submitSinglePlayerScore(finalScore) {
+    const user = this.getCurrentUser();
+    await this.submitScore(finalScore, {
+        mode: 'arcade',
+        difficulty: this.difficulty,
+        playerName: user.name,
+        metadata: {
+            accuracy: this.accuracy,
+            hits: this.hits
+        }
+    });
+}
+```
+
+### What `submitScore()` Does
+
+The SDK's `submitScore()` method handles everything automatically:
+
+1. **Online submission** - Sends score to Supabase leaderboard
+2. **Personal best tracking** - Updates if this is a new personal best
+3. **Stats update** - Increments games played, tracks accuracy
+4. **Activity feed** - Posts to activity feed if personal best
+5. **Offline queue** - Queues score for later if offline
+6. **Guest fallback** - Stores locally for guest users
+
+### Multiplayer Score Submission
+
+For multiplayer games, use `showMultiplayerResults()` which automatically submits scores for all players:
+
+```javascript
+// In your game over handler
+if (this.isMultiplayer()) {
+    this.showMultiplayerResults({
+        cleared: true,  // or false for game over
+        onRetry: () => this.restart(),
+        onMenu: () => this.showMenu()
+    });
+}
+```
+
+This automatically:
+- Saves scores for all players to local high scores
+- Submits online scores for logged-in players
+- Updates player stats (games played, hits, shots)
+- Updates personal bests
+
+### Score Metadata
+
+Include relevant game data in the metadata:
+
+```javascript
+await this.submitScore(score, {
+    mode: 'arcade',           // Required: 'arcade', 'endless', etc.
+    difficulty: 'normal',     // Required: 'easy', 'normal', 'hard'
+    playerName: 'Player1',    // Optional: override name
+    metadata: {               // Optional: game-specific data
+        accuracy: 85,
+        hits: 100,
+        combo: 15,
+        round: 10,
+        gameMode: 'versus'    // For multiplayer context
+    }
+});
+```
+
+### Fetching Leaderboards
+
+```javascript
+// Get leaderboard
+const { entries, total } = await this.services.getLeaderboard(gameId, {
+    mode: 'arcade',
+    difficulty: 'normal',
+    timeFilter: 'all',  // 'daily', 'weekly', 'monthly', 'all'
+    limit: 50
+});
+
+// Get current user's rank
+const { rank, percentile, score } = await this.services.getMyRank(gameId, {
+    mode: 'arcade',
+    difficulty: 'normal'
+});
+
+// Get friends leaderboard
+const { entries } = await this.services.getFriendsLeaderboard(gameId, {
+    mode: 'arcade',
+    difficulty: 'normal'
+});
 ```
 
 ---

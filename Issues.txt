@@ -1,0 +1,17 @@
+Point gun
+versus mode - if one person loses all of their lives the game immediately ends. It should continue for the other player with the dead player unable to shoot. 
+
+Point Gun - Lives not changing in the life display in top corners
+
+Point gun - text 'Stage x' over life counter in top left. Lets pot it just above the timer at the bottom center.
+
+
+
+mouse cursor always visible
+
+
+p1 login details are cached and held in login box
+
+
+
+

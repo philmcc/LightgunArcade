@@ -292,10 +292,18 @@ export class BaseGame {
 
     /**
      * Get the current user profile.
-     * @returns {Object} User object with username, display_name, avatar_url, etc.
+     * @returns {Object} User object with username, display_name, avatar_url, name (alias), etc.
      */
     getCurrentUser() {
-        return this.system.auth.getCurrentUser();
+        const user = this.system.auth.getCurrentUser();
+        if (user) {
+            // Add 'name' as an alias for display_name for convenience
+            return {
+                ...user,
+                name: user.display_name || user.username || 'Player'
+            };
+        }
+        return { name: 'Player', isGuest: true };
     }
 
     /**
@@ -458,12 +466,21 @@ export class BaseGame {
         const screen = new PlayerSelectScreen(this.uiLayer, {
             manifest: modifiedManifest,
             gunManager: this.system.gunManager,
+            localPlayers: this.system.localPlayers,
             onStart: (playerCount, mode, gunAssignments) => {
-                // Initialize players
+                // Get user data for each player slot
+                const playerUsers = [];
+                for (let i = 0; i < playerCount; i++) {
+                    const slot = this.system.localPlayers?.getSlot(i);
+                    playerUsers.push(slot?.user || null);
+                }
+                
+                // Initialize players with user info from local players
                 this.players.initSession(playerCount, {
                     mode,
                     simultaneous: true,
-                    gunAssignments
+                    gunAssignments,
+                    playerUsers
                 });
                 
                 this._multiplayerConfig = { playerCount, mode, gunAssignments };
@@ -544,6 +561,9 @@ export class BaseGame {
         const results = this.players.getFinalResults();
         const teamStats = this.players.isCooperative() ? this.players.getTeamStats() : null;
         
+        // Save scores for each player
+        this._saveMultiplayerScores(results, options.cleared);
+        
         this.ui.overlay.showMultiplayerResults({
             players: results,
             mode: this.players.gameMode,
@@ -551,6 +571,33 @@ export class BaseGame {
             teamStats,
             onRetry: options.onRetry,
             onMenu: options.onMenu
+        });
+    }
+    
+    /**
+     * Save scores for all players in multiplayer mode
+     * Uses the centralized GameServices for proper score submission
+     * @param {Array} results - Sorted player results from PlayerManager
+     * @param {boolean} cleared - Whether game was cleared
+     * @private
+     */
+    async _saveMultiplayerScores(results, cleared) {
+        const difficulty = this._multiplayerConfig?.difficulty || 'normal';
+        const gameMode = this.players.gameMode;
+        
+        // Also save to game-specific local high scores
+        for (const player of results) {
+            const playerName = player.user?.display_name || player.user?.username || player.name;
+            if (this.highScores && player.score > 0) {
+                this.highScores.addScore(playerName, player.score, difficulty);
+            }
+        }
+        
+        // Use centralized service for online submission
+        await this.services.submitMultiplayerScores(this._gameId, results, {
+            mode: 'arcade',
+            difficulty,
+            gameMode
         });
     }
 

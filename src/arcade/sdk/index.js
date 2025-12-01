@@ -31,6 +31,7 @@ export { AssetLoader, assetLoader } from './AssetLoader.js';
 // Multiplayer
 export { PlayerSelectScreen } from './PlayerSelectScreen.js';
 export { PlayerManager } from '../core/PlayerManager.js';
+export { LocalPlayersManager } from '../core/LocalPlayersManager.js';
 
 // Services (re-export from services folder)
 export { GameHighScores } from '../services/GameHighScores.js';

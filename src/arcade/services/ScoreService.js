@@ -93,6 +93,119 @@ export class ScoreService {
     }
 
     /**
+     * Submit a score for a specific user (for multiplayer)
+     * This bypasses the current auth user and submits directly for the specified user
+     * @param {string} gameId - Game identifier
+     * @param {Object} user - User object with id, display_name, username
+     * @param {number} score - Score value
+     * @param {Object} options - Additional options
+     * @returns {Promise<{score: Object, isPersonalBest: boolean, error: Error}>}
+     */
+    async submitScoreForUser(gameId, user, score, options = {}) {
+        const {
+            mode = 'arcade',
+            difficulty = 'normal',
+            metadata = {}
+        } = options;
+
+        if (!user?.id) {
+            return { score: null, isPersonalBest: false, error: new Error('No user specified') };
+        }
+
+        // Guest users - store locally only
+        if (user.isGuest) {
+            const playerName = user.display_name || user.username || 'Guest';
+            return this._submitLocalScore(gameId, score, { mode, difficulty, metadata, playerName });
+        }
+
+        if (!isSupabaseConfigured()) {
+            return { score: null, isPersonalBest: false, error: new Error('Supabase not configured') };
+        }
+
+        try {
+            // Insert score for this specific user
+            const { data: scoreData, error: scoreError } = await supabase
+                .from('scores')
+                .insert({
+                    user_id: user.id,
+                    game_id: gameId,
+                    mode,
+                    difficulty,
+                    score,
+                    metadata
+                })
+                .select()
+                .single();
+
+            if (scoreError) {
+                console.error('Failed to insert score:', scoreError);
+                return { score: null, isPersonalBest: false, error: scoreError };
+            }
+
+            // Check/update personal best
+            const isPersonalBest = await this._updatePersonalBest(
+                user.id, gameId, mode, difficulty, score, scoreData.id
+            );
+
+            console.log(`Score submitted for ${user.display_name || user.username}: ${score} (PB: ${isPersonalBest})`);
+            return { score: scoreData, isPersonalBest, error: null };
+        } catch (error) {
+            console.error('Score submission error:', error);
+            return { score: null, isPersonalBest: false, error };
+        }
+    }
+
+    /**
+     * Update user stats after a game
+     * @param {Object} user - User object with id
+     * @param {Object} gameStats - Stats from the game (optional)
+     * @returns {Promise<{success: boolean, error: Error}>}
+     */
+    async updateUserStats(user, gameStats = {}) {
+        if (!user?.id || user.isGuest) {
+            return { success: false, error: new Error('No valid user') };
+        }
+
+        if (!isSupabaseConfigured()) {
+            return { success: false, error: new Error('Supabase not configured') };
+        }
+
+        try {
+            // Get current stats
+            const { data: currentProfile } = await supabase
+                .from('profiles')
+                .select('stats')
+                .eq('id', user.id)
+                .single();
+
+            if (currentProfile) {
+                const stats = currentProfile.stats || {};
+                const newStats = {
+                    ...stats,
+                    total_games_played: (stats.total_games_played || 0) + 1,
+                    total_hits: (stats.total_hits || 0) + (gameStats.hits || 0),
+                    total_shots: (stats.total_shots || 0) + (gameStats.shots || 0)
+                };
+
+                await supabase
+                    .from('profiles')
+                    .update({ 
+                        stats: newStats,
+                        last_active: new Date().toISOString()
+                    })
+                    .eq('id', user.id);
+
+                console.log(`Updated stats for ${user.display_name || user.username}: games=${newStats.total_games_played}`);
+                return { success: true, error: null };
+            }
+            return { success: false, error: new Error('Profile not found') };
+        } catch (error) {
+            console.error(`Failed to update stats for user ${user.id}:`, error);
+            return { success: false, error };
+        }
+    }
+
+    /**
      * Get personal best for a game/mode/difficulty
      * @param {string} gameId 
      * @param {string} mode 

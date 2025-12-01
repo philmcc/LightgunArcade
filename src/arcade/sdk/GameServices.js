@@ -14,6 +14,12 @@ export class GameServices {
     constructor(system) {
         this.system = system;
         this._currentSession = null;
+        
+        // Expose underlying services for direct access when needed
+        this.scores = system.scores;
+        this.sessions = system.sessions;
+        this.leaderboards = system.leaderboards;
+        this.activity = system.activity;
     }
 
     // =========================================================================
@@ -112,24 +118,84 @@ export class GameServices {
 
     /**
      * Submit scores for multiple players (multiplayer game end)
+     * Handles both logged-in users and guests properly.
+     * 
      * @param {string} gameId 
-     * @param {Array} playerScores - [{playerIndex, score, name, metadata}]
-     * @param {Object} options - mode, difficulty
+     * @param {Array} players - Player objects from PlayerManager with user info
+     * @param {Object} options
+     * @param {string} options.mode - Game mode (default: 'arcade')
+     * @param {string} options.difficulty - Difficulty level
+     * @param {string} options.gameMode - Multiplayer mode (versus/coop)
      * @returns {Promise<Array>} Results for each player
      */
-    async submitMultiplayerScores(gameId, playerScores, options = {}) {
+    async submitMultiplayerScores(gameId, players, options = {}) {
+        const {
+            mode = 'arcade',
+            difficulty = 'normal',
+            gameMode = 'versus'
+        } = options;
+        
         const results = [];
 
-        for (const ps of playerScores) {
-            const result = await this.submitScore(gameId, ps.score, {
-                mode: options.mode,
-                difficulty: options.difficulty,
-                metadata: ps.metadata,
-                playerName: ps.name
-            });
-            results.push({ ...result, playerIndex: ps.playerIndex });
+        for (let rank = 0; rank < players.length; rank++) {
+            const player = players[rank];
+            const playerName = player.user?.display_name || player.user?.username || player.name;
+            const score = player.score;
+            
+            if (score <= 0) continue;
+            
+            // Save to local high scores
+            this.system.globalHighScores.addScore(gameId, playerName, score, difficulty);
+            
+            // Submit online score if player is logged in
+            if (player.user && !player.user.isGuest && player.isLoggedIn) {
+                try {
+                    const result = await this.scores.submitScoreForUser(gameId, player.user, score, {
+                        mode,
+                        difficulty,
+                        metadata: {
+                            hits: player.hits || 0,
+                            accuracy: player.accuracy || 0,
+                            multiplayer: true,
+                            gameMode,
+                            rank: rank + 1,
+                            playerCount: players.length
+                        }
+                    });
+                    
+                    // Update player stats
+                    await this.scores.updateUserStats(player.user, {
+                        hits: player.hits || 0,
+                        shots: player.stats?.totalShots || 0
+                    });
+                    
+                    results.push({ 
+                        playerIndex: player.index, 
+                        playerName,
+                        score,
+                        ...result 
+                    });
+                } catch (e) {
+                    console.warn(`Failed to submit score for ${playerName}:`, e);
+                    results.push({ 
+                        playerIndex: player.index, 
+                        playerName,
+                        score,
+                        error: e 
+                    });
+                }
+            } else {
+                // Guest player - local score only
+                results.push({ 
+                    playerIndex: player.index, 
+                    playerName,
+                    score,
+                    isGuest: true 
+                });
+            }
         }
-
+        
+        console.log(`Submitted scores for ${results.length} players`);
         return results;
     }
 

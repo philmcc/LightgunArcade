@@ -343,12 +343,20 @@ export class Game extends BaseGame {
             minPlayers: 2, // Force 2 players since they selected a 2-player mode
             defaultPlayers: 2,
             onStart: (playerCount, mode, gunAssignments) => {
+                // Get user data for each player slot
+                const playerUsers = [];
+                for (let i = 0; i < playerCount; i++) {
+                    const slot = this.system.localPlayers?.getSlot(i);
+                    playerUsers.push(slot?.user || null);
+                }
+                
                 // Set up the multiplayer mode
                 const modeType = multiplayerMode === 'coop' ? 'coop' : 'versus';
                 this.players.initSession(playerCount, { 
                     mode: modeType, 
                     simultaneous: true,
-                    gunAssignments 
+                    gunAssignments,
+                    playerUsers
                 });
                 this.players.resetGame(3);
                 
@@ -926,25 +934,59 @@ export class Game extends BaseGame {
             if (this.highScores.isHighScore(finalScore)) {
                 this.showNameEntry(finalScore, cleared);
             } else {
+                // Still submit to online even if not a local high score
+                this._submitSinglePlayerScore(finalScore);
                 this.showGameOverScreen(finalScore, cleared);
             }
         }
     }
-
-    showNameEntry(finalScore, cleared) {
-        this.setInGame(false);
-        
-        this.ui.overlay.showNameEntry({
-            score: finalScore,
-            defaultName: this.getCurrentUser().name,
-            onSubmit: (name) => {
-                // Save to local game scores
-                this.highScores.addScore(name, finalScore, this.roundManager.difficulty, this.roundManager.gameMode);
-                // Save to global system scores
-                this.saveGlobalScore(name, finalScore, this.roundManager.difficulty);
-                this.showGameOverScreen(finalScore, cleared);
+    
+    /**
+     * Submit single player score to online leaderboard
+     * @private
+     */
+    async _submitSinglePlayerScore(finalScore) {
+        const user = this.getCurrentUser();
+        await this.submitScore(finalScore, {
+            mode: 'arcade',
+            difficulty: this.roundManager.difficulty,
+            playerName: user.name,
+            metadata: {
+                gameMode: this.roundManager.gameMode,
+                accuracy: this.roundManager.accuracy || 0,
+                ducksHit: this.roundManager.ducksHit || 0,
+                round: this.roundManager.currentRound || 0
             }
         });
+    }
+
+    async showNameEntry(finalScore, cleared) {
+        this.setInGame(false);
+        
+        const user = this.getCurrentUser();
+        const isLoggedIn = !user.isGuest;
+        
+        // If logged in, auto-submit with their username
+        if (isLoggedIn) {
+            // Save to local game scores
+            this.highScores.addScore(user.name, finalScore, this.roundManager.difficulty, this.roundManager.gameMode);
+            
+            // Submit to online leaderboard
+            await this.submitScore(finalScore, {
+                mode: 'arcade',
+                difficulty: this.roundManager.difficulty,
+                playerName: user.name,
+                metadata: {
+                    gameMode: this.roundManager.gameMode,
+                    accuracy: this.roundManager.accuracy || 0,
+                    ducksHit: this.roundManager.ducksHit || 0,
+                    round: this.roundManager.currentRound || 0
+                }
+            });
+        }
+        // Guest users don't submit scores - just show the game over screen
+        
+        this.showGameOverScreen(finalScore, cleared);
     }
 
     showGameOverScreen(finalScore, cleared) {

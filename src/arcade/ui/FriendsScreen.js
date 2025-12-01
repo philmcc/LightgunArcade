@@ -5,12 +5,14 @@
  * - View friends list with online status
  * - Send/accept/decline friend requests
  * - Search for users
+ * - Recent players (people you've played with)
  * - Block/unblock users
  */
 export class FriendsScreen {
     constructor(container, options = {}) {
         this.container = container;
         this.friendService = options.friendService;
+        this.sessionService = options.sessionService;
         this.onBack = options.onBack || (() => {});
         this.onViewProfile = options.onViewProfile || (() => {});
         
@@ -18,6 +20,8 @@ export class FriendsScreen {
         this.friends = [];
         this.pendingRequests = [];
         this.searchResults = [];
+        this.recentPlayers = [];
+        this.sentRequests = [];
         this.isLoading = false;
     }
 
@@ -31,13 +35,26 @@ export class FriendsScreen {
         this.renderLoading();
 
         try {
-            const [friendsResult, pendingResult] = await Promise.all([
+            const promises = [
                 this.friendService.getFriends(),
-                this.friendService.getPendingRequests()
-            ]);
+                this.friendService.getPendingRequests(),
+                this.friendService.getSentRequests()
+            ];
+            
+            // Only load recent players if sessionService is available
+            if (this.sessionService) {
+                promises.push(this.sessionService.getRecentlyPlayedWith(10));
+            }
 
-            this.friends = friendsResult.friends || [];
-            this.pendingRequests = pendingResult.requests || [];
+            const results = await Promise.all(promises);
+
+            this.friends = results[0].friends || [];
+            this.pendingRequests = results[1].requests || [];
+            this.sentRequests = results[2].requests || [];
+            
+            if (results[3]) {
+                this.recentPlayers = results[3].players || [];
+            }
         } catch (error) {
             console.error('Failed to load friends data:', error);
         }
@@ -59,6 +76,9 @@ export class FriendsScreen {
                     </button>
                     <button class="tab ${this.currentTab === 'requests' ? 'active' : ''}" data-tab="requests">
                         Requests ${pendingCount > 0 ? `<span class="badge">${pendingCount}</span>` : ''}
+                    </button>
+                    <button class="tab ${this.currentTab === 'recent' ? 'active' : ''}" data-tab="recent">
+                        Recent Players
                     </button>
                     <button class="tab ${this.currentTab === 'search' ? 'active' : ''}" data-tab="search">
                         Find Friends
@@ -82,6 +102,8 @@ export class FriendsScreen {
                 return this._renderFriendsList();
             case 'requests':
                 return this._renderRequests();
+            case 'recent':
+                return this._renderRecentPlayers();
             case 'search':
                 return this._renderSearch();
             default:
@@ -136,30 +158,90 @@ export class FriendsScreen {
 
         return `
             <div class="requests-list">
-                ${this.pendingRequests.map(request => `
-                    <div class="request-item" data-request-id="${request.id}">
-                        <div class="friend-avatar">
-                            ${request.avatar_url 
-                                ? `<img src="${request.avatar_url}" alt="${request.username}">`
-                                : '<span class="avatar-placeholder">👤</span>'
-                            }
+                ${this.pendingRequests.map(request => {
+                    const user = request.from || request;
+                    return `
+                        <div class="request-item" data-request-id="${request.requestId}">
+                            <div class="friend-avatar">
+                                ${user.avatar_url 
+                                    ? `<img src="${user.avatar_url}" alt="${user.username}">`
+                                    : '<span class="avatar-placeholder">👤</span>'
+                                }
+                            </div>
+                            <div class="friend-info">
+                                <span class="friend-name">${user.display_name || user.username}</span>
+                                <span class="friend-username">@${user.username}</span>
+                            </div>
+                            <div class="request-actions">
+                                <button class="btn-small btn-accept" data-action="accept" data-request-id="${request.requestId}">
+                                    Accept
+                                </button>
+                                <button class="btn-small btn-decline" data-action="decline" data-request-id="${request.requestId}">
+                                    Decline
+                                </button>
+                            </div>
                         </div>
-                        <div class="friend-info">
-                            <span class="friend-name">${request.display_name || request.username}</span>
-                            <span class="friend-username">@${request.username}</span>
-                        </div>
-                        <div class="request-actions">
-                            <button class="btn-small btn-accept" data-action="accept" data-request-id="${request.id}">
-                                Accept
-                            </button>
-                            <button class="btn-small btn-decline" data-action="decline" data-request-id="${request.id}">
-                                Decline
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         `;
+    }
+
+    _renderRecentPlayers() {
+        if (this.recentPlayers.length === 0) {
+            return `
+                <div class="empty-state">
+                    <p>No recent players</p>
+                    <p class="hint">Play multiplayer games to see players here.</p>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="recent-players-list">
+                ${this.recentPlayers.map(player => {
+                    const isFriend = this.friends.some(f => f.id === player.id);
+                    const hasPending = this.sentRequests.some(r => r.to?.id === player.id);
+
+                    return `
+                        <div class="recent-player-item" data-user-id="${player.id}">
+                            <div class="friend-avatar">
+                                ${player.avatar_url 
+                                    ? `<img src="${player.avatar_url}" alt="${player.username}">`
+                                    : '<span class="avatar-placeholder">👤</span>'
+                                }
+                            </div>
+                            <div class="friend-info">
+                                <span class="friend-name">${player.display_name || player.username}</span>
+                                <span class="friend-username">@${player.username}</span>
+                                <span class="recent-info">Played ${player.lastGame} • ${this._formatTimeAgo(player.lastPlayedAt)}</span>
+                            </div>
+                            <div class="friend-actions">
+                                ${isFriend 
+                                    ? '<span class="status-text">Already friends</span>'
+                                    : hasPending
+                                        ? '<span class="status-text">Request sent</span>'
+                                        : `<button class="btn-small btn-add" data-action="add-by-id" data-user-id="${player.id}">Add Friend</button>`
+                                }
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    _formatTimeAgo(dateString) {
+        if (!dateString) return 'recently';
+        const date = new Date(dateString);
+        const now = new Date();
+        const seconds = Math.floor((now - date) / 1000);
+
+        if (seconds < 60) return 'just now';
+        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+        if (seconds < 604800) return `${Math.floor(seconds / 86400)}d ago`;
+        return date.toLocaleDateString();
     }
 
     _renderSearch() {
@@ -278,6 +360,12 @@ export class FriendsScreen {
                     await this.friendService.sendFriendRequestByUsername(data.username);
                     this._showNotification('Friend request sent!');
                     await this._handleSearch(this.container.querySelector('#search-input')?.value);
+                    break;
+
+                case 'add-by-id':
+                    await this.friendService.sendFriendRequest(data.userId);
+                    this._showNotification('Friend request sent!');
+                    await this.loadData();
                     break;
 
                 case 'accept':

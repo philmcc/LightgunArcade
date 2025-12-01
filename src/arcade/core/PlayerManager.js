@@ -37,12 +37,14 @@ export class PlayerManager {
      * @param {string} options.mode - Game mode ('coop', 'versus', 'turns')
      * @param {boolean} options.simultaneous - Whether players play simultaneously
      * @param {Array} options.gunAssignments - Gun indices assigned to each player
+     * @param {Array} options.playerUsers - User objects for each player slot (from LocalPlayersManager)
      */
     initSession(playerCount, options = {}) {
         const {
             mode = playerCount > 1 ? 'coop' : 'single',
             simultaneous = true,
-            gunAssignments = null
+            gunAssignments = null,
+            playerUsers = null
         } = options;
 
         this.gameMode = mode;
@@ -51,7 +53,9 @@ export class PlayerManager {
         this.currentPlayerIndex = 0;
 
         for (let i = 0; i < playerCount; i++) {
-            this.players.push(this._createPlayer(i, gunAssignments ? gunAssignments[i] : i));
+            const gunIndex = gunAssignments ? gunAssignments[i] : i;
+            const userData = playerUsers ? playerUsers[i] : null;
+            this.players.push(this._createPlayer(i, gunIndex, userData));
         }
 
         this.activePlayerCount = playerCount;
@@ -63,15 +67,26 @@ export class PlayerManager {
     /**
      * Create a player object
      * @private
+     * @param {number} index - Player index
+     * @param {number} gunIndex - Gun index assigned to this player
+     * @param {Object} userData - User data from LocalPlayersManager (optional)
      */
-    _createPlayer(index, gunIndex) {
+    _createPlayer(index, gunIndex, userData = null) {
         const colors = PlayerManager.PLAYER_COLORS[index] || PlayerManager.PLAYER_COLORS[0];
+        
+        // Determine player name from user data or fallback
+        const name = userData?.display_name || userData?.username || `Player ${index + 1}`;
+        const isLoggedIn = userData && !userData.isGuest;
         
         return {
             index,
             gunIndex,
-            name: `Player ${index + 1}`,
+            name,
             colors,
+            
+            // User account info (for score submission)
+            user: userData || null,
+            isLoggedIn,
             
             // Game state (reset per game)
             score: 0,

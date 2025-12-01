@@ -319,6 +319,110 @@ export class SessionService {
     }
 
     /**
+     * Get users that the current user has recently played with
+     * @param {number} limit - Max results
+     * @returns {Promise<{players: Array, error: Error}>}
+     */
+    async getRecentlyPlayedWith(limit = 10) {
+        const profile = this.auth.getCurrentUser();
+        if (!profile || profile.isGuest) {
+            return { players: [], error: null };
+        }
+
+        if (!isSupabaseConfigured()) {
+            return { players: [], error: new Error('Supabase not configured') };
+        }
+
+        try {
+            // Get recent multiplayer sessions that include this user
+            const { data: sessions, error } = await supabase
+                .from('play_sessions')
+                .select(`
+                    id,
+                    players,
+                    started_at,
+                    game_id,
+                    games (name)
+                `)
+                .eq('is_multiplayer', true)
+                .order('started_at', { ascending: false })
+                .limit(50); // Get more sessions to find unique players
+
+            if (error) {
+                return { players: [], error };
+            }
+
+            // Extract unique players from sessions (excluding self)
+            const playerMap = new Map();
+            
+            for (const session of sessions) {
+                if (!session.players) continue;
+                
+                // Check if current user was in this session
+                const userInSession = session.players.some(p => p.user_id === profile.id);
+                if (!userInSession) continue;
+
+                for (const player of session.players) {
+                    // Skip self and guests
+                    if (player.user_id === profile.id || player.user_id === 'guest' || player.is_guest) {
+                        continue;
+                    }
+
+                    if (!playerMap.has(player.user_id)) {
+                        playerMap.set(player.user_id, {
+                            userId: player.user_id,
+                            username: player.username,
+                            lastPlayedAt: session.started_at,
+                            lastGame: session.games?.name || session.game_id,
+                            playCount: 1
+                        });
+                    } else {
+                        playerMap.get(player.user_id).playCount++;
+                    }
+                }
+            }
+
+            // Get full profile info for these users
+            const userIds = Array.from(playerMap.keys());
+            if (userIds.length === 0) {
+                return { players: [], error: null };
+            }
+
+            const { data: profiles, error: profileError } = await supabase
+                .from('profiles')
+                .select('id, username, display_name, avatar_url')
+                .in('id', userIds);
+
+            if (profileError) {
+                // Return what we have from session data
+                const players = Array.from(playerMap.values())
+                    .sort((a, b) => new Date(b.lastPlayedAt) - new Date(a.lastPlayedAt))
+                    .slice(0, limit);
+                return { players, error: null };
+            }
+
+            // Merge profile data
+            const players = Array.from(playerMap.values())
+                .map(p => {
+                    const profile = profiles.find(pr => pr.id === p.userId);
+                    return {
+                        ...p,
+                        id: p.userId,
+                        username: profile?.username || p.username,
+                        display_name: profile?.display_name,
+                        avatar_url: profile?.avatar_url
+                    };
+                })
+                .sort((a, b) => new Date(b.lastPlayedAt) - new Date(a.lastPlayedAt))
+                .slice(0, limit);
+
+            return { players, error: null };
+        } catch (error) {
+            return { players: [], error };
+        }
+    }
+
+    /**
      * Increment game play count
      * @private
      */
@@ -353,17 +457,43 @@ export class SessionService {
      * @private
      */
     async _updateUserStats(durationSeconds) {
-        const profile = this.auth.getCurrentUser();
-        if (!profile || profile.isGuest || !isSupabaseConfigured()) {
+        if (!isSupabaseConfigured()) {
             return;
         }
 
+        // Get all non-guest players from the session
+        const players = this.currentSession?.players || [];
+        const userIds = players
+            .filter(p => p.user_id && p.user_id !== 'guest' && !p.is_guest)
+            .map(p => p.user_id);
+        
+        // If no logged-in players, try the main auth user
+        if (userIds.length === 0) {
+            const profile = this.auth.getCurrentUser();
+            if (profile && !profile.isGuest) {
+                userIds.push(profile.id);
+            }
+        }
+        
+        // Update stats for each player
+        for (const userId of userIds) {
+            await this._updateStatsForUser(userId, durationSeconds);
+        }
+    }
+    
+    /**
+     * Update stats for a specific user
+     * @param {string} userId 
+     * @param {number} durationSeconds 
+     * @private
+     */
+    async _updateStatsForUser(userId, durationSeconds) {
         try {
             // Get current stats
             const { data: currentProfile } = await supabase
                 .from('profiles')
                 .select('stats')
-                .eq('id', profile.id)
+                .eq('id', userId)
                 .single();
 
             if (currentProfile) {
@@ -380,10 +510,12 @@ export class SessionService {
                         stats: newStats,
                         last_active: new Date().toISOString()
                     })
-                    .eq('id', profile.id);
+                    .eq('id', userId);
+                    
+                console.log(`Updated stats for user ${userId}: games=${newStats.total_games_played}, playtime=${newStats.total_playtime_seconds}s`);
             }
         } catch (e) {
-            console.error('Failed to update user stats:', e);
+            console.error(`Failed to update stats for user ${userId}:`, e);
         }
     }
 }

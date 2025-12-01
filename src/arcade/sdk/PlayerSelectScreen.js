@@ -5,6 +5,7 @@
  * - Player count selection (1-4 players based on game manifest)
  * - Game mode selection (coop, versus, etc. based on manifest)
  * - Gun assignment status for each player slot
+ * - User login/logout per player slot
  */
 
 import { PlayerManager } from '../core/PlayerManager.js';
@@ -15,12 +16,14 @@ export class PlayerSelectScreen {
      * @param {Object} options - Configuration options
      * @param {Object} options.manifest - Game manifest with multiplayer config
      * @param {Object} options.gunManager - Reference to GunManager
+     * @param {Object} options.localPlayers - Reference to LocalPlayersManager
      * @param {Function} options.onStart - Called when game should start: (playerCount, mode, gunAssignments) => {}
      * @param {Function} options.onBack - Called when back button is pressed
      */
     constructor(uiLayer, options = {}) {
         this.uiLayer = uiLayer;
         this.gunManager = options.gunManager;
+        this.localPlayers = options.localPlayers;
         this.manifest = options.manifest || {};
         this.onStart = options.onStart;
         this.onBack = options.onBack;
@@ -36,6 +39,9 @@ export class PlayerSelectScreen {
         this.selectedPlayerCount = mp.defaultPlayers || this.minPlayers;
         this.selectedMode = this.defaultMode;
         this.gunAssignments = []; // Gun index for each player slot
+        
+        // Login UI state
+        this.loginSlot = null; // Which slot is showing login form
     }
 
     /**
@@ -160,6 +166,11 @@ export class PlayerSelectScreen {
             const gunIndex = this.gunAssignments[i];
             const hasGun = gunIndex !== null && this._isGunConnected(gunIndex);
             
+            // Get user info from LocalPlayersManager
+            const slot = this.localPlayers?.getSlot(i);
+            const user = slot?.user;
+            const isLoggedIn = slot?.isLoggedIn || false;
+            
             html += `
                 <div class="player-slot ${isActive ? 'active' : 'inactive'}" 
                      data-slot="${i}"
@@ -168,10 +179,33 @@ export class PlayerSelectScreen {
                         <span class="player-number">P${i + 1}</span>
                         <span class="player-color-indicator" style="background: ${colors.primary};"></span>
                     </div>
+                    
+                    <div class="slot-user">
+                        ${user ? `
+                            <div class="user-info">
+                                ${user.avatar_url ? 
+                                    `<img src="${user.avatar_url}" class="slot-avatar" alt="">` : 
+                                    `<div class="slot-avatar-placeholder">👤</div>`
+                                }
+                                <span class="user-name">${user.display_name || user.username}</span>
+                                ${isLoggedIn ? '<span class="logged-in-badge">✓</span>' : '<span class="guest-badge">GUEST</span>'}
+                            </div>
+                            ${isActive ? `
+                                <button class="slot-login-btn" data-slot="${i}" data-action="${isLoggedIn ? 'logout' : 'login'}">
+                                    ${isLoggedIn ? 'LOGOUT' : 'LOGIN'}
+                                </button>
+                            ` : ''}
+                        ` : `
+                            ${isActive ? `
+                                <button class="slot-login-btn" data-slot="${i}" data-action="login">LOGIN</button>
+                            ` : '<span class="slot-empty-user">—</span>'}
+                        `}
+                    </div>
+                    
                     <div class="slot-status">
                         ${isActive ? (hasGun ? 
-                            `<span class="gun-ready">✓ GUN ${gunIndex + 1}</span>` : 
-                            `<span class="gun-missing">⚠ NO GUN</span>`
+                            `<span class="gun-ready">🎯 GUN ${gunIndex + 1}</span>` : 
+                            `<span class="gun-missing">🖱️ MOUSE</span>`
                         ) : '<span class="slot-empty">—</span>'}
                     </div>
                 </div>
@@ -200,6 +234,7 @@ export class PlayerSelectScreen {
             btn.onclick = () => {
                 this.selectedPlayerCount = parseInt(btn.dataset.count);
                 this._updateUI();
+                this._bindSlotLoginButtons();
             };
         });
 
@@ -215,6 +250,11 @@ export class PlayerSelectScreen {
         const startBtn = document.getElementById('btn-start-game');
         if (startBtn && this.onStart) {
             startBtn.onclick = () => {
+                // Mark active slots
+                for (let i = 0; i < this.maxPlayers; i++) {
+                    this.localPlayers?.setSlotActive(i, i < this.selectedPlayerCount);
+                }
+                
                 const assignments = this.gunAssignments.slice(0, this.selectedPlayerCount);
                 this.onStart(this.selectedPlayerCount, this.selectedMode, assignments);
             };
@@ -224,6 +264,171 @@ export class PlayerSelectScreen {
         const backBtn = document.getElementById('btn-back');
         if (backBtn && this.onBack) {
             backBtn.onclick = this.onBack;
+        }
+        
+        // Slot login/logout buttons
+        this._bindSlotLoginButtons();
+    }
+    
+    /**
+     * Bind login/logout button handlers for player slots
+     * @private
+     */
+    _bindSlotLoginButtons() {
+        document.querySelectorAll('.slot-login-btn').forEach(btn => {
+            btn.onclick = async () => {
+                const slotIndex = parseInt(btn.dataset.slot);
+                const action = btn.dataset.action;
+                
+                if (action === 'logout') {
+                    await this.localPlayers?.logoutFromSlot(slotIndex);
+                    this._updateUI();
+                    this._bindSlotLoginButtons();
+                } else {
+                    this._showSlotLogin(slotIndex);
+                }
+            };
+        });
+    }
+    
+    /**
+     * Show login form for a specific slot
+     * @private
+     */
+    _showSlotLogin(slotIndex) {
+        this.loginSlot = slotIndex;
+        const colors = PlayerManager.PLAYER_COLORS[slotIndex];
+        
+        this.uiLayer.innerHTML = `
+            <div class="screen slot-login-screen" style="--player-color: ${colors.primary};">
+                <h1>LOGIN - PLAYER ${slotIndex + 1}</h1>
+                
+                <div class="login-form">
+                    <input type="email" id="slot-email" placeholder="Email" />
+                    <input type="password" id="slot-password" placeholder="Password" />
+                    <div id="slot-login-error" class="error-message" style="display: none;"></div>
+                    <button id="btn-slot-login" class="btn-primary">SIGN IN</button>
+                    <div class="login-divider">or</div>
+                    <button id="btn-slot-register" class="btn-secondary">CREATE ACCOUNT</button>
+                    <button id="btn-slot-guest">PLAY AS GUEST</button>
+                    <button id="btn-slot-back">BACK</button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('btn-slot-login').onclick = () => this._handleSlotLogin(slotIndex);
+        document.getElementById('btn-slot-register').onclick = () => this._showSlotRegister(slotIndex);
+        document.getElementById('btn-slot-guest').onclick = () => {
+            this.localPlayers?.setSlotAsGuest(slotIndex);
+            this.loginSlot = null;
+            this.show();
+        };
+        document.getElementById('btn-slot-back').onclick = () => {
+            this.loginSlot = null;
+            this.show();
+        };
+    }
+    
+    /**
+     * Show registration form for a specific slot
+     * @private
+     */
+    _showSlotRegister(slotIndex) {
+        const colors = PlayerManager.PLAYER_COLORS[slotIndex];
+        
+        this.uiLayer.innerHTML = `
+            <div class="screen slot-login-screen" style="--player-color: ${colors.primary};">
+                <h1>REGISTER - PLAYER ${slotIndex + 1}</h1>
+                
+                <div class="login-form">
+                    <input type="text" id="slot-username" placeholder="Username" />
+                    <input type="email" id="slot-email" placeholder="Email" />
+                    <input type="password" id="slot-password" placeholder="Password" />
+                    <input type="password" id="slot-password-confirm" placeholder="Confirm Password" />
+                    <div id="slot-login-error" class="error-message" style="display: none;"></div>
+                    <button id="btn-slot-register" class="btn-primary">CREATE ACCOUNT</button>
+                    <div class="login-divider">or</div>
+                    <button id="btn-slot-login-link">ALREADY HAVE AN ACCOUNT?</button>
+                    <button id="btn-slot-back">BACK</button>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('btn-slot-register').onclick = () => this._handleSlotRegister(slotIndex);
+        document.getElementById('btn-slot-login-link').onclick = () => this._showSlotLogin(slotIndex);
+        document.getElementById('btn-slot-back').onclick = () => {
+            this.loginSlot = null;
+            this.show();
+        };
+    }
+    
+    /**
+     * Handle login form submission for a slot
+     * @private
+     */
+    async _handleSlotLogin(slotIndex) {
+        const email = document.getElementById('slot-email').value;
+        const password = document.getElementById('slot-password').value;
+        const errorEl = document.getElementById('slot-login-error');
+        
+        if (!email || !password) {
+            errorEl.textContent = 'Please enter email and password';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        errorEl.style.display = 'none';
+        
+        const { user, error } = await this.localPlayers?.loginToSlot(slotIndex, email, password);
+        
+        if (error) {
+            errorEl.textContent = error.message;
+            errorEl.style.display = 'block';
+        } else {
+            this.loginSlot = null;
+            this.show();
+        }
+    }
+    
+    /**
+     * Handle registration form submission for a slot
+     * @private
+     */
+    async _handleSlotRegister(slotIndex) {
+        const username = document.getElementById('slot-username').value;
+        const email = document.getElementById('slot-email').value;
+        const password = document.getElementById('slot-password').value;
+        const passwordConfirm = document.getElementById('slot-password-confirm').value;
+        const errorEl = document.getElementById('slot-login-error');
+        
+        if (!username || !email || !password) {
+            errorEl.textContent = 'Please fill in all fields';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        if (password !== passwordConfirm) {
+            errorEl.textContent = 'Passwords do not match';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        if (password.length < 6) {
+            errorEl.textContent = 'Password must be at least 6 characters';
+            errorEl.style.display = 'block';
+            return;
+        }
+        
+        errorEl.style.display = 'none';
+        
+        const { user, error } = await this.localPlayers?.registerToSlot(slotIndex, email, password, username);
+        
+        if (error) {
+            errorEl.textContent = error.message;
+            errorEl.style.display = 'block';
+        } else {
+            this.loginSlot = null;
+            this.show();
         }
     }
 
@@ -253,6 +458,8 @@ export class PlayerSelectScreen {
         const slotsContainer = document.getElementById('player-slots');
         if (slotsContainer) {
             slotsContainer.innerHTML = this._renderPlayerSlots();
+            // Re-bind login buttons after re-rendering slots
+            this._bindSlotLoginButtons();
         }
 
         // Update start button state

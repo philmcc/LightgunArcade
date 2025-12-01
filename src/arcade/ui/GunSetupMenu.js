@@ -112,12 +112,37 @@ export class GunSetupMenu {
 
             const showCursor = gun.config.showCursor !== false;
             
+            // Get player assignment from LocalPlayersManager
+            const assignedSlot = this.arcade.localPlayers?.getSlotForGun(gun.index);
+            const assignedUser = assignedSlot !== null ? this.arcade.localPlayers.getUser(assignedSlot) : null;
+            const playerColors = ['#ff4444', '#4444ff', '#44ff44', '#ffff44'];
+            
             return `
         <div class="gun-slot ${statusClass}" data-index="${gun.index}">
           <div class="gun-header" style="border-color: ${gun.color}">
             <span class="gun-name">${gun.name}</span>
             <span class="gun-status">${statusText}</span>
           </div>
+          
+          <div class="gun-player-assignment">
+            <label>Assigned to:</label>
+            <select class="player-assign-select" data-gun="${gun.index}">
+              <option value="-1">-- None --</option>
+              ${[0, 1, 2, 3].map(i => {
+                  const slot = this.arcade.localPlayers?.getSlot(i);
+                  const user = slot?.user;
+                  const selected = assignedSlot === i ? 'selected' : '';
+                  const label = user ? `P${i + 1}: ${user.display_name || user.username}` : `P${i + 1}: (empty)`;
+                  return `<option value="${i}" ${selected} style="color: ${playerColors[i]}">${label}</option>`;
+              }).join('')}
+            </select>
+            ${assignedUser ? `
+              <div class="assigned-user-chip" style="border-color: ${playerColors[assignedSlot]}">
+                P${assignedSlot + 1}: ${assignedUser.display_name || assignedUser.username}
+              </div>
+            ` : ''}
+          </div>
+          
           <div class="gun-details">
             <div class="detail-row">
               <label>Type:</label>
@@ -269,6 +294,26 @@ export class GunSetupMenu {
                         this.gunManager.cursorManager.updateAllCursorVisibility();
                     }
                 }
+            };
+        });
+        
+        // Player assignment dropdowns
+        document.querySelectorAll('.player-assign-select').forEach(select => {
+            select.onchange = (e) => {
+                const gunIndex = parseInt(e.target.dataset.gun);
+                const slotIndex = parseInt(e.target.value);
+                
+                if (slotIndex === -1) {
+                    // Unassign gun from all slots
+                    this.arcade.localPlayers?.unassignGun(gunIndex);
+                } else {
+                    // Assign gun to selected slot
+                    this.arcade.localPlayers?.assignGun(slotIndex, gunIndex);
+                }
+                
+                // Re-render to update UI
+                this.render();
+                this.attachListeners();
             };
         });
     }

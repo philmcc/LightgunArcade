@@ -230,11 +230,19 @@ export class Game extends BaseGame {
             minPlayers: 2,
             defaultPlayers: 2,
             onStart: (playerCount, selectedMode, gunAssignments) => {
-                // Initialize multiplayer session
+                // Get user data for each player slot
+                const playerUsers = [];
+                for (let i = 0; i < playerCount; i++) {
+                    const slot = this.system.localPlayers?.getSlot(i);
+                    playerUsers.push(slot?.user || null);
+                }
+                
+                // Initialize multiplayer session with user data
                 this.players.initSession(playerCount, {
                     mode: mode === 'coop' ? 'coop' : 'versus',
                     simultaneous: true,
-                    gunAssignments
+                    gunAssignments,
+                    playerUsers
                 });
                 this.players.resetGame(3);
                 
@@ -536,27 +544,41 @@ export class Game extends BaseGame {
         } else if (this.highScores.isHighScore(finalScore)) {
             this.showNameEntry(finalScore);
         } else {
+            // Still submit to online even if not a local high score
+            this._submitSinglePlayerScore(finalScore);
             this.showGameClearScreen(finalScore);
         }
     }
 
-    showNameEntry(finalScore) {
+    async showNameEntry(finalScore) {
         this.setInGame(false);
         
-        this.ui.overlay.showNameEntry({
-            score: finalScore,
-            defaultName: this.getCurrentUser().name,
-            onSubmit: (name) => {
-                this.highScores.addScore(name, finalScore, this.levelManager.difficulty);
-                this.saveGlobalScore(name, finalScore, this.levelManager.difficulty);
-                
-                if (this.levelManager.lives > 0) {
-                    this.showGameClearScreen(finalScore);
-                } else {
-                    this.showGameOverScreen(finalScore);
+        const user = this.getCurrentUser();
+        const isLoggedIn = !user.isGuest;
+        
+        // If logged in, auto-submit with their username
+        if (isLoggedIn) {
+            // Save to local game scores
+            this.highScores.addScore(user.name, finalScore, this.levelManager.difficulty);
+            
+            // Submit to online leaderboard
+            await this.submitScore(finalScore, {
+                mode: 'arcade',
+                difficulty: this.levelManager.difficulty,
+                playerName: user.name,
+                metadata: {
+                    accuracy: this.levelManager.accuracy || 0,
+                    hits: this.levelManager.hits || 0
                 }
-            }
-        });
+            });
+        }
+        // Guest users don't submit scores - just show the game over screen
+        
+        if (this.levelManager.lives > 0) {
+            this.showGameClearScreen(finalScore);
+        } else {
+            this.showGameOverScreen(finalScore);
+        }
     }
 
     showGameClearScreen(finalScore) {
@@ -588,6 +610,8 @@ export class Game extends BaseGame {
         } else if (this.highScores.isHighScore(finalScore)) {
             this.showNameEntry(finalScore);
         } else {
+            // Still submit to online even if not a local high score
+            this._submitSinglePlayerScore(finalScore);
             this.showGameOverScreen(finalScore);
         }
     }
@@ -600,6 +624,23 @@ export class Game extends BaseGame {
             score: finalScore,
             onRetry: () => this.startGame(this.levelManager.difficulty),
             onMenu: () => this.showMenu()
+        });
+    }
+    
+    /**
+     * Submit single player score to online leaderboard
+     * @private
+     */
+    async _submitSinglePlayerScore(finalScore) {
+        const user = this.getCurrentUser();
+        await this.submitScore(finalScore, {
+            mode: 'arcade',
+            difficulty: this.levelManager.difficulty,
+            playerName: user.name,
+            metadata: {
+                accuracy: this.levelManager.accuracy || 0,
+                hits: this.levelManager.hits || 0
+            }
         });
     }
 
